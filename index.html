@@ -36,6 +36,7 @@
   <meta name="twitter:image:alt" content="ACE Converter — konversi file langsung di perangkatmu">
   <meta name="author" content="ArilCode Engineer">
   <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://cdnjs.cloudflare.com" crossorigin>
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="./style.css">
@@ -277,7 +278,7 @@
           <label class="switch">
             <input type="checkbox" id="watermark" checked>
             <span class="track" aria-hidden="true"><span class="thumb-dot"></span></span>
-            <span class="switch-text"><b>Watermark</b><small>ACE - ArilCode Engineer</small></span>
+            <span class="switch-text"><b>Watermark logo ACE</b><small>Kecil di kiri bawah, hanya di halaman terakhir</small></span>
           </label>
         </div>
 
@@ -290,7 +291,7 @@
                 <img id="sheetImg" alt="" hidden>
                 <span id="sheetPh">Foto 1</span>
               </div>
-              <div class="sheet-wm" id="sheetWm" aria-hidden="true"><span>ACE - ArilCode Engineer</span></div>
+              <div class="sheet-wm" id="sheetWm" aria-hidden="true"><img src="./images/watermark.png" alt="" width="120" height="59" decoding="async"></div>
             </div>
           </div>
           <p class="hint center" id="sheetCap"></p>
@@ -381,11 +382,9 @@
 
   <div class="toasts" id="toasts" aria-live="polite"></div>
 
-  <!-- Pustaka (dimuat dari CDN; semua pemrosesan tetap di browser) -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
-  <script src="./main.js"></script>
+  <!-- Pustaka PDF/ZIP (jsPDF, JSZip, pdf-lib, pdf.js) TIDAK dimuat di sini:
+       main.js mengunduhnya otomatis hanya saat dibutuhkan, supaya halaman awal ringan di HP. -->
+  <script src="./watermark.js"></script>
+  <script src="./main.js" defer></script>
 </body>
 </html>

@@ -31,7 +31,10 @@
   /* ---------------------------------------------------------
      Konfigurasi
   --------------------------------------------------------- */
-  const WM_TEXT = 'ACE - ArilCode Engineer';
+  const WM = window.ACE_WM || { src: '', ratio: 2 };
+  // ukuran logo watermark: ~17% lebar halaman, dibatasi 20–42 mm; jarak ke tepi 4 mm
+  const WM_EDGE = 4;
+  const wmWidthMm = pw => clamp(pw * 0.17, 20, 42);
   const IMG_EXT = ['jpg', 'jpeg', 'jfif', 'png', 'webp', 'gif', 'bmp', 'avif'];
   const TXT_EXT = ['txt', 'md', 'csv', 'tsv', 'log', 'json', 'xml', 'html', 'htm', 'css', 'js', 'ini', 'yml', 'yaml'];
 
@@ -138,19 +141,63 @@
   $('#progCancel').addEventListener('click', () => { state.cancel = true; $('#progText').textContent = 'Membatalkan…'; });
 
   /* ---------------------------------------------------------
-     Pustaka eksternal
+     Pustaka eksternal — dimuat HANYA saat dibutuhkan (lazy),
+     supaya halaman awal ringan di HP.
   --------------------------------------------------------- */
+  const CDN = 'https://cdnjs.cloudflare.com/ajax/libs/';
+  const LIBS = {
+    jspdf: { url: CDN + 'jspdf/2.5.1/jspdf.umd.min.js', ok: () => window.jspdf && window.jspdf.jsPDF },
+    jszip: { url: CDN + 'jszip/3.10.1/jszip.min.js', ok: () => window.JSZip },
+    pdflib: { url: CDN + 'pdf-lib/1.17.1/pdf-lib.min.js', ok: () => window.PDFLib },
+    pdfjs: {
+      url: CDN + 'pdf.js/3.11.174/pdf.min.js',
+      ok: () => window.pdfjsLib,
+      after: () => { window.pdfjsLib.GlobalWorkerOptions.workerSrc = CDN + 'pdf.js/3.11.174/pdf.worker.min.js'; }
+    }
+  };
+  const libPromise = {};
   function need(name) {
-    const ok = {
-      jspdf: () => window.jspdf && window.jspdf.jsPDF,
-      jszip: () => window.JSZip,
-      pdflib: () => window.PDFLib,
-      pdfjs: () => window.pdfjsLib
-    }[name]();
-    if (!ok) throw new Error('Pustaka "' + name + '" belum termuat. Periksa koneksi internet lalu muat ulang halaman.');
+    const lib = LIBS[name];
+    if (lib.ok()) return Promise.resolve();
+    if (!libPromise[name]) {
+      libPromise[name] = new Promise((res, rej) => {
+        const sc = document.createElement('script');
+        sc.src = lib.url; sc.async = true;
+        sc.onload = () => { if (lib.after) lib.after(); res(); };
+        sc.onerror = () => { sc.remove(); delete libPromise[name]; rej(new Error('Pustaka "' + name + '" belum termuat. Periksa koneksi internet lalu coba lagi.')); };
+        document.head.appendChild(sc);
+      });
+    }
+    return libPromise[name];
   }
-  if (window.pdfjsLib) {
-    window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+  // unduh pustaka di latar belakang sesuai alat yang dipilih (setelah browser idle)
+  const WARM = { img2pdf: ['jspdf'], txt2pdf: ['jspdf'], mergepdf: ['pdflib', 'pdfjs'], pdf2img: ['pdfjs', 'jszip'], imgconv: ['jszip'], pdf2txt: ['pdfjs'] };
+  function warmLibs() {
+    const run = () => (WARM[state.tool] || []).forEach(n => need(n).catch(() => {}));
+    if (window.requestIdleCallback) requestIdleCallback(run, { timeout: 2500 }); else setTimeout(run, 400);
+  }
+
+  /* Logo watermark: dinormalkan lewat canvas menjadi PNG RGBA standar (aman untuk jsPDF & pdf-lib) */
+  let wmPromise = null;
+  function getWatermark() {
+    if (!wmPromise) {
+      wmPromise = new Promise((res, rej) => {
+        const img = new Image();
+        img.onload = () => {
+          const c = document.createElement('canvas');
+          c.width = img.naturalWidth; c.height = img.naturalHeight;
+          c.getContext('2d').drawImage(img, 0, 0);
+          const dataUrl = c.toDataURL('image/png');
+          const bin = atob(dataUrl.split(',')[1]);
+          const bytes = new Uint8Array(bin.length);
+          for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+          res({ dataUrl, bytes, ratio: img.naturalWidth / img.naturalHeight });
+        };
+        img.onerror = () => rej(new Error('Logo watermark tidak dapat dimuat.'));
+        img.src = WM.src;
+      });
+    }
+    return wmPromise;
   }
 
   /* ---------------------------------------------------------
@@ -301,10 +348,12 @@
 
     const wm = $('#sheetWm');
     wm.hidden = !o.watermark;
-    const H = W / ar;
-    const diag = Math.sqrt(W * W + H * H);
-    wm.firstElementChild.style.fontSize = Math.max(6, (diag * 0.7) / 12.7) + 'px';
-    wm.style.setProperty('--wm-angle', '-' + (Math.atan2(ph_, pw) * 180 / Math.PI).toFixed(1) + 'deg');
+    if (o.watermark) {
+      const wmW = wmWidthMm(pw);
+      wm.style.width = (wmW / pw * 100) + '%';
+      wm.style.left = (WM_EDGE / pw * 100) + '%';
+      wm.style.bottom = (WM_EDGE / ph_ * 100) + '%';
+    }
 
     $('#sheetCap').textContent = cap;
   }
@@ -326,6 +375,7 @@
     state.files.push(...items);
     invalidate();
     renderList();
+    warmLibs();
     items.forEach(enqueueThumb);
     toast(`${items.length} file ditambahkan.`, 'ok', 2200);
     const lastRow = list.lastElementChild;
@@ -418,12 +468,12 @@
   let thumbBusy = 0;
   function enqueueThumb(f) { thumbQueue.push(f); pumpThumbs(); }
   function pumpThumbs() {
-    while (thumbBusy < 2 && thumbQueue.length) {
+    while (thumbBusy < 1 && thumbQueue.length) {
       const f = thumbQueue.shift();
       if (!state.files.includes(f)) continue;
       thumbBusy++;
       makeThumb(f).catch(err => { f.error = f.kind === 'pdf' ? 'PDF tidak dapat dibaca (mungkin terkunci)' : 'Gambar tidak dapat dibaca'; console.warn(err); })
-        .finally(() => { thumbBusy--; updateRow(f); pumpThumbs(); });
+        .finally(() => { thumbBusy--; updateRow(f); setTimeout(pumpThumbs, 40); /* beri napas ke main thread agar scroll tetap mulus */ });
     }
   }
 
@@ -441,7 +491,7 @@
       f.thumb = c.toDataURL('image/jpeg', 0.7);
       if (bmp.close) bmp.close();
     } else if (f.kind === 'pdf') {
-      need('pdfjs');
+      await need('pdfjs');
       const pdf = await pdfjsLib.getDocument({ data: new Uint8Array(await f.file.arrayBuffer()) }).promise;
       f.pages = pdf.numPages;
       const page = await pdf.getPage(1);
@@ -497,6 +547,7 @@
     if (state.files.length < prevCount) toast('File yang tidak cocok dengan alat ini dihapus dari daftar.', 'warn', 3800);
     invalidate();
     renderList();
+    if (state.files.length) warmLibs();
   });
 
   // perubahan pengaturan membatalkan hasil sebelumnya
@@ -524,24 +575,16 @@
   const canvasToBlob = (c, type, q) => new Promise((res, rej) => c.toBlob(b => b ? res(b) : rej(new Error('Gagal membuat gambar (memori perangkat mungkin tidak cukup).')), type, q));
 
   /* ---------------------------------------------------------
-     Watermark (jsPDF)
+     Watermark logo (jsPDF) — hanya di halaman TERAKHIR,
+     kecil, di pojok kiri bawah.
   --------------------------------------------------------- */
-  function drawWatermark(doc, pw, ph) {
+  async function drawLastPageWatermark(doc, pw, ph) {
+    const wm = await getWatermark();
+    const w = wmWidthMm(pw), h = w / wm.ratio;
+    doc.setPage(doc.getNumberOfPages());
     doc.saveGraphicsState();
-    doc.setGState(new doc.GState({ opacity: 0.14 }));
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(40);
-    const w40 = doc.getTextWidth(WM_TEXT);
-    const diag = Math.sqrt(pw * pw + ph * ph);
-    const fs = 40 * (diag * 0.7) / w40;
-    doc.setFontSize(fs);
-    const tw = w40 * fs / 40;
-    const th = Math.atan2(ph, pw);
-    const cap = fs * 0.3528 * 0.36;
-    const x0 = pw / 2 - (tw / 2) * Math.cos(th) + Math.sin(th) * cap;
-    const y0 = ph / 2 + (tw / 2) * Math.sin(th) + Math.cos(th) * cap;
-    doc.setTextColor(100, 116, 139);
-    doc.text(WM_TEXT, x0, y0, { angle: th * 180 / Math.PI });
+    doc.setGState(new doc.GState({ opacity: 0.9 }));
+    doc.addImage(wm.dataUrl, 'PNG', WM_EDGE, ph - h - WM_EDGE, w, h, 'ace-wm', 'FAST');
     doc.restoreGraphicsState();
   }
 
@@ -549,7 +592,7 @@
      BUILDER 1: Gambar → PDF
   --------------------------------------------------------- */
   async function buildImagesPdf(o) {
-    need('jspdf');
+    await need('jspdf');
     const { jsPDF } = window.jspdf;
     const files = state.files;
     const q = QUALITY[o.quality];
@@ -557,6 +600,7 @@
     const canvas = document.createElement('canvas');
     const ctx = canvas.getContext('2d');
     let doc = null;
+    let lastPw = 0, lastPh = 0;
 
     for (let i = 0; i < files.length; i++) {
       checkCancel();
@@ -604,12 +648,13 @@
       else doc.addPage([pw, ph], orientation);
 
       doc.addImage(bytes, 'JPEG', dx, dy, dw, dh, 'img' + i, 'FAST');
-      if (o.watermark) drawWatermark(doc, pw, ph);
+      lastPw = pw; lastPh = ph;
       await tick();
     }
     canvas.width = canvas.height = 0;
 
     checkCancel();
+    if (o.watermark) await drawLastPageWatermark(doc, lastPw, lastPh);
     setProgress(0.97, 'Menyusun file PDF…');
     await tick();
     const blob = doc.output('blob');
@@ -620,12 +665,14 @@
      BUILDER 2: Teks → PDF
   --------------------------------------------------------- */
   async function buildTextPdf(o) {
-    need('jspdf');
+    await need('jspdf');
     const { jsPDF } = window.jspdf;
     const files = state.files;
     let [pw, ph] = PAPERS[o.paper] || PAPERS.a4;
     if (o.orient === 'l') [pw, ph] = [ph, pw];
     const m = Math.max(o.margin, 8);
+    // sisakan ruang bawah untuk logo agar tidak menimpa teks di halaman terakhir
+    const bm = o.watermark ? Math.max(m, WM_EDGE + wmWidthMm(pw) / WM.ratio + 3) : m;
     const doc = new jsPDF({ orientation: pw > ph ? 'l' : 'p', unit: 'mm', format: [pw, ph], compress: true });
     const fs = o.fontSize;
     const lh = fs * 0.3528 * 1.4;
@@ -648,7 +695,7 @@
       for (let p = 0; p < paras.length; p++) {
         const lines = doc.splitTextToSize(paras[p] === '' ? ' ' : paras[p], maxW);
         for (const ln of lines) {
-          if (y > ph - m) { doc.addPage([pw, ph], pw > ph ? 'l' : 'p'); setFont(); y = m + fs * 0.3528; }
+          if (y > ph - bm) { doc.addPage([pw, ph], pw > ph ? 'l' : 'p'); setFont(); y = m + fs * 0.3528; }
           doc.text(ln, m, y);
           y += lh;
         }
@@ -658,9 +705,7 @@
     }
 
     const total = doc.getNumberOfPages();
-    if (o.watermark) {
-      for (let p = 1; p <= total; p++) { doc.setPage(p); drawWatermark(doc, pw, ph); }
-    }
+    if (o.watermark) await drawLastPageWatermark(doc, pw, ph);
     setProgress(0.97, 'Menyusun file PDF…');
     await tick();
     const blob = doc.output('blob');
@@ -671,8 +716,8 @@
      BUILDER 3: Gabung PDF (pdf-lib)
   --------------------------------------------------------- */
   async function buildMergePdf(o) {
-    need('pdflib');
-    const { PDFDocument, StandardFonts, rgb, degrees } = window.PDFLib;
+    await need('pdflib');
+    const { PDFDocument } = window.PDFLib;
     const files = state.files;
     const out = await PDFDocument.create();
 
@@ -687,23 +732,16 @@
       await tick();
     }
 
-    if (o.watermark) {
-      setProgress(0.92, 'Menambahkan watermark…');
-      const font = await out.embedFont(StandardFonts.HelveticaBold);
-      for (const page of out.getPages()) {
-        const { width: w, height: h } = page.getSize();
-        const th = Math.atan2(h, w);
-        const w40 = font.widthOfTextAtSize(WM_TEXT, 40);
-        const diag = Math.sqrt(w * w + h * h);
-        const size = 40 * (diag * 0.7) / w40;
-        const tw = w40 * size / 40;
-        const cap = size * 0.36 * 0.72;
-        page.drawText(WM_TEXT, {
-          x: w / 2 - (tw / 2) * Math.cos(th) + Math.sin(th) * cap,
-          y: h / 2 - (tw / 2) * Math.sin(th) - Math.cos(th) * cap,
-          size, font, color: rgb(0.39, 0.45, 0.55), opacity: 0.14, rotate: degrees(th * 180 / Math.PI)
-        });
-      }
+    if (o.watermark && out.getPageCount()) {
+      setProgress(0.92, 'Menambahkan logo di halaman terakhir…');
+      const wm = await getWatermark();
+      const img = await out.embedPng(wm.bytes);
+      const page = out.getPages()[out.getPageCount() - 1];
+      const box = page.getMediaBox();
+      const w = clamp(box.width * 0.17, 48, 120);
+      const h = w / wm.ratio;
+      const edge = 11; // ≈ 4 mm
+      page.drawImage(img, { x: box.x + edge, y: box.y + edge, width: w, height: h, opacity: 0.9 });
     }
 
     setProgress(0.97, 'Menyimpan PDF…');
@@ -736,7 +774,7 @@
   }
 
   async function buildPdfToImages(o) {
-    need('pdfjs'); need('jszip');
+    await need('pdfjs'); await need('jszip');
     const mime = o.imgFormat === 'jpeg' ? 'image/jpeg' : 'image/png';
     const ext = o.imgFormat === 'jpeg' ? 'jpg' : 'png';
     const images = [];
@@ -780,7 +818,7 @@
      BUILDER 5: Ubah format gambar
   --------------------------------------------------------- */
   async function buildConvertImages(o) {
-    need('jszip');
+    await need('jszip');
     const mime = 'image/' + o.convFormat;
     const ext = o.convFormat === 'jpeg' ? 'jpg' : o.convFormat;
     const files = state.files;
@@ -833,7 +871,7 @@
      BUILDER 6: PDF → Teks
   --------------------------------------------------------- */
   async function buildPdfToText() {
-    need('pdfjs');
+    await need('pdfjs');
     const files = state.files;
     let out = '';
     let pagesTotal = 0;
@@ -969,7 +1007,7 @@
   previewDlg.addEventListener('close', () => { resetPreview(); document.body.classList.remove('no-scroll'); });
 
   async function previewPdf(blob, body, token) {
-    need('pdfjs');
+    await need('pdfjs');
     const pdf = await pdfjsLib.getDocument({ data: new Uint8Array(await blob.arrayBuffer()) }).promise;
     if (token !== state.pv.token) { pdf.destroy(); return; }
     state.pv.pdf = pdf;
@@ -986,7 +1024,7 @@
       if (token !== state.pv.token) return;
       const base = page.getViewport({ scale: 1 });
       const target = Math.min(Math.max(body.clientWidth - 40, 280), 900);
-      const dpr = Math.min(window.devicePixelRatio || 1, 2);
+      const dpr = Math.min(window.devicePixelRatio || 1, 1.5);
       const vp = page.getViewport({ scale: (target / base.width) * dpr });
       const c = document.createElement('canvas');
       c.width = Math.floor(vp.width); c.height = Math.floor(vp.height);
@@ -1001,7 +1039,7 @@
 
     const io = new IntersectionObserver(entries => {
       entries.forEach(en => { if (en.isIntersecting) { io.unobserve(en.target); renderPage(en.target); } });
-    }, { root: body, rootMargin: '900px 0px' });
+    }, { root: body, rootMargin: '500px 0px' });
     state.pv.io = io;
 
     for (let n = 1; n <= pdf.numPages; n++) {
