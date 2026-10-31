@@ -574,6 +574,17 @@
     d.addEventListener('cancel', () => document.body.classList.remove('no-scroll'));
   });
 
+  /* ---------------------------------------------------------
+     PWA: mode offline (service worker) + info status koneksi
+  --------------------------------------------------------- */
+  if ('serviceWorker' in navigator && location.protocol !== 'file:') {
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('./sw.js').catch(() => {});
+    });
+  }
+  window.addEventListener('offline', () => toast('Kamu sedang offline. Fitur yang sudah tersimpan tetap bisa dipakai.', 'info', 4200));
+  window.addEventListener('online', () => toast('Kembali online.', 'ok', 2200));
+
   // perubahan pengaturan membatalkan hasil sebelumnya
   $('#settings').addEventListener('input', e => { if (e.target.id !== 'fileName') { invalidate(); updateUI(); } });
   $('#settings').addEventListener('change', e => { if (e.target.id !== 'fileName') { invalidate(); updateUI(); } });

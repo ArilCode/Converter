@@ -1,6 +1,6 @@
 {
-  "name": "All Converter",
-  "short_name": "Converter",
+  "name": "ACE Converter",
+  "short_name": "ACE Converter",
   "description": "Konversi file langsung di perangkatmu. Tanpa server, siap dipakai",
   "start_url": "./index.html",
   "display": "standalone",
@@ -25,5 +25,13 @@
       "type": "image/png",
       "purpose": "maskable"
     }
+  ],
+  "id": "./index.html",
+  "scope": "./",
+  "lang": "id",
+  "orientation": "any",
+  "categories": [
+    "productivity",
+    "utilities"
   ]
 }
