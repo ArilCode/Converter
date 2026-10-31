@@ -109,6 +109,10 @@
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M20 4 8.12 15.88"/><path d="M14.47 14.48 20 20"/><path d="M8.12 8.12 12 12"/></svg>
         <span>Hapus Latar</span>
       </button>
+      <button class="tool" aria-pressed="false" data-tool="restore" type="button">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9z"/><path d="M19 15l.8 2.2L22 18l-2.2.8L19 21l-.8-2.2L16 18l2.2-.8z"/></svg>
+        <span>Restore Foto</span>
+      </button>
       <button class="tool" aria-pressed="false" data-tool="mergepdf" type="button">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m12 2 10 5-10 5L2 7z"/><path d="m2 17 10 5 10-5"/><path d="m2 12 10 5 10-5"/></svg>
         <span>Gabung PDF</span>
@@ -291,7 +295,7 @@
         </div>
 
         <!-- Ubah format gambar -->
-        <div class="setting" data-tools="imgconv imghd">
+        <div class="setting" data-tools="imgconv imghd restore">
           <span class="setting-label">Simpan sebagai format</span>
           <div class="segmented seg3" role="radiogroup" aria-label="Format tujuan">
             <label><input type="radio" name="convFormat" value="jpeg" checked><span>JPG</span></label>
@@ -299,7 +303,7 @@
             <label><input type="radio" name="convFormat" value="webp"><span>WEBP</span></label>
           </div>
         </div>
-        <div class="setting" id="convQualitySetting" data-tools="imgconv imghd">
+        <div class="setting" id="convQualitySetting" data-tools="imgconv imghd restore">
           <label class="setting-label" for="convQuality">Kualitas: <b id="convQualityVal">90</b>%</label>
           <input type="range" id="convQuality" min="30" max="100" value="90">
         </div>
@@ -348,6 +352,34 @@
             <label><input type="radio" name="rbBg" value="black"><span>Hitam</span></label>
           </div>
           <p class="hint">Hasil selalu PNG. Pertama kali dipakai butuh internet untuk mengunduh model AI (puluhan MB), setelah itu biasanya tersimpan dan bisa dipakai lagi tanpa internet. Foto besar otomatis dikecilkan maksimal 2560 px agar HP tidak hang.</p>
+        </div>
+
+        <!-- Restore foto -->
+        <div class="setting" data-tools="restore">
+          <label class="switch">
+            <input type="checkbox" id="rsColor" checked>
+            <span class="track" aria-hidden="true"><span class="thumb-dot"></span></span>
+            <span class="switch-text"><b>Perbaiki warna &amp; kontras</b><small>Mengembalikan warna pudar/kekuningan dan foto yang gelap</small></span>
+          </label>
+        </div>
+        <div class="setting" data-tools="restore">
+          <label class="switch">
+            <input type="checkbox" id="rsScratch" checked>
+            <span class="track" aria-hidden="true"><span class="thumb-dot"></span></span>
+            <span class="switch-text"><b>Hapus bintik &amp; goresan halus</b><small>Menghilangkan debu dan titik kecil di foto lama</small></span>
+          </label>
+        </div>
+        <div class="setting" data-tools="restore">
+          <label class="switch">
+            <input type="checkbox" id="rsDenoise" checked>
+            <span class="track" aria-hidden="true"><span class="thumb-dot"></span></span>
+            <span class="switch-text"><b>Haluskan noise</b><small>Merapikan area foto yang kasar atau berbintik</small></span>
+          </label>
+        </div>
+        <div class="setting" data-tools="restore">
+          <label class="setting-label" for="rsSharp">Ketajaman: <b id="rsSharpVal">40</b>%</label>
+          <input type="range" id="rsSharp" min="0" max="100" value="40">
+          <p class="hint">Perbaikan otomatis tanpa AI, diproses di perangkatmu dan tetap jalan offline. Cocok untuk foto lama yang pudar, gelap, atau berdebu. Goresan panjang dan wajah yang rusak parah belum bisa diperbaiki. Hasil dibatasi sekitar 16 megapiksel.</p>
         </div>
 
         <!-- Watermark -->
