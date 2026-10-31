@@ -1,6 +1,6 @@
 /* ACE Converter — Service Worker (mode offline)
    Naikkan angka VERSION setiap kali kamu mengubah file web supaya HP memperbarui cache. */
-const VERSION = 'v5';
+const VERSION = 'v6';
 const APP_CACHE = 'ace-app-' + VERSION;
 const LIB_CACHE = 'ace-lib-v1';      // pustaka CDN (versinya sudah dikunci di URL)
 const FONT_CACHE = 'ace-font-v1';
@@ -17,7 +17,10 @@ const LIB_FILES = [
   CDN + 'jszip/3.10.1/jszip.min.js',
   CDN + 'pdf-lib/1.17.1/pdf-lib.min.js',
   CDN + 'pdf.js/3.11.174/pdf.min.js',
-  CDN + 'pdf.js/3.11.174/pdf.worker.min.js'
+  CDN + 'pdf.js/3.11.174/pdf.worker.min.js',
+  CDN + 'html2canvas/1.4.1/html2canvas.min.js',
+  CDN + 'xlsx/0.18.5/xlsx.full.min.js',
+  CDN + 'mammoth/1.6.0/mammoth.browser.min.js'
 ];
 const FONT_CSS = 'https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap';
 

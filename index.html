@@ -125,6 +125,22 @@
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h16M4 12h16M4 18h10"/></svg>
         <span>PDF → Teks</span>
       </button>
+      <button class="tool" aria-pressed="false" data-tool="html2pdf" type="button">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m16 18 6-6-6-6"/><path d="m8 6-6 6 6 6"/></svg>
+        <span>HTML → PDF</span>
+      </button>
+      <button class="tool" aria-pressed="false" data-tool="word2pdf" type="button">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/><path d="M9 13h6"/><path d="M9 17h6"/></svg>
+        <span>Word → PDF</span>
+      </button>
+      <button class="tool" aria-pressed="false" data-tool="excel2pdf" type="button">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 10h18"/><path d="M3 15h18"/><path d="M9 4v16"/></svg>
+        <span>Excel → PDF</span>
+      </button>
+      <button class="tool" aria-pressed="false" data-tool="ppt2pdf" type="button">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M12 16v4"/><path d="M8 20h8"/></svg>
+        <span>PowerPoint → PDF</span>
+      </button>
     </nav>
       </div>
     </dialog>
@@ -187,7 +203,7 @@
         </div>
 
         <!-- Orientasi -->
-        <div class="setting" id="orientSetting" data-tools="img2pdf txt2pdf">
+        <div class="setting" id="orientSetting" data-tools="img2pdf txt2pdf html2pdf word2pdf excel2pdf">
           <span class="setting-label">Orientasi</span>
           <div class="segmented seg3" role="radiogroup" aria-label="Orientasi">
             <label><input type="radio" name="orient" value="p" checked><span>
@@ -201,7 +217,7 @@
         </div>
 
         <!-- Ukuran kertas -->
-        <div class="setting" data-tools="img2pdf txt2pdf">
+        <div class="setting" data-tools="img2pdf txt2pdf html2pdf word2pdf excel2pdf">
           <label class="setting-label" for="paper">Ukuran kertas</label>
           <div class="select-wrap">
             <select id="paper">
@@ -217,7 +233,7 @@
         </div>
 
         <!-- Margin -->
-        <div class="setting" data-tools="img2pdf txt2pdf">
+        <div class="setting" data-tools="img2pdf txt2pdf html2pdf word2pdf excel2pdf">
           <span class="setting-label">Ukuran margin</span>
           <div class="segmented seg4" role="radiogroup" aria-label="Ukuran margin">
             <label><input type="radio" name="margin" value="0"><span>Tanpa<small>0 mm</small></span></label>
@@ -388,7 +404,7 @@
         </div>
 
         <!-- Watermark -->
-        <div class="setting" data-tools="img2pdf txt2pdf mergepdf">
+        <div class="setting" data-tools="img2pdf txt2pdf mergepdf html2pdf word2pdf excel2pdf ppt2pdf">
           <label class="switch">
             <input type="checkbox" id="watermark" checked>
             <span class="track" aria-hidden="true"><span class="thumb-dot"></span></span>
@@ -397,7 +413,7 @@
         </div>
 
         <!-- Pratinjau tata letak -->
-        <div class="setting" data-tools="img2pdf txt2pdf">
+        <div class="setting" data-tools="img2pdf txt2pdf html2pdf word2pdf excel2pdf">
           <span class="setting-label">Pratinjau tata letak</span>
           <div class="sheet-wrap">
             <div class="sheet" id="sheet">

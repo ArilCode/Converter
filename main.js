@@ -41,6 +41,10 @@
   const KIND = {
     img: f => IMG_EXT.includes(extOf(f.name)) || /^image\/(jpeg|png|webp|gif|bmp|avif)$/.test(f.type),
     pdf: f => extOf(f.name) === 'pdf' || f.type === 'application/pdf',
+    html: f => ['html', 'htm'].includes(extOf(f.name)) || f.type === 'text/html',
+    docx: f => extOf(f.name) === 'docx',
+    xlsx: f => ['xlsx', 'xls', 'xlsm', 'ods'].includes(extOf(f.name)),
+    pptx: f => extOf(f.name) === 'pptx',
     txt: f => TXT_EXT.includes(extOf(f.name)) || (f.type || '').startsWith('text/')
   };
 
@@ -51,6 +55,10 @@
     imghd: { name: 'HD Foto', kind: 'img', accept: '.jpg,.jpeg,.jfif,.png,.webp,.gif,.bmp,.avif,image/*', formats: 'JPG · PNG · WEBP · GIF · BMP · AVIF', defName: 'foto-hd', ext: 'zip' },
     removebg: { name: 'Hapus Latar', kind: 'img', accept: '.jpg,.jpeg,.jfif,.png,.webp,.gif,.bmp,.avif,image/*', formats: 'JPG · PNG · WEBP · GIF · BMP · AVIF', defName: 'tanpa-latar', ext: 'zip' },
     restore: { name: 'Restore Foto', kind: 'img', accept: '.jpg,.jpeg,.jfif,.png,.webp,.gif,.bmp,.avif,image/*', formats: 'JPG · PNG · WEBP · GIF · BMP · AVIF', defName: 'foto-restore', ext: 'zip' },
+    html2pdf: { name: 'HTML → PDF', kind: 'html', accept: '.html,.htm,text/html', formats: 'HTML · HTM', defName: 'html-ke-pdf', ext: 'pdf' },
+    word2pdf: { name: 'Word → PDF', kind: 'docx', accept: '.docx', formats: 'DOCX (Word)', defName: 'word-ke-pdf', ext: 'pdf' },
+    excel2pdf: { name: 'Excel → PDF', kind: 'xlsx', accept: '.xlsx,.xls,.xlsm,.ods', formats: 'XLSX · XLS · XLSM · ODS', defName: 'excel-ke-pdf', ext: 'pdf' },
+    ppt2pdf: { name: 'PowerPoint → PDF', kind: 'pptx', accept: '.pptx', formats: 'PPTX (PowerPoint)', defName: 'ppt-ke-pdf', ext: 'pdf' },
     mergepdf: { name: 'Gabung PDF', kind: 'pdf', accept: '.pdf,application/pdf', formats: 'PDF — urutan sesuai nomor', defName: 'gabungan', ext: 'pdf' },
     txt2pdf: { name: 'Teks → PDF', kind: 'txt', accept: '.' + TXT_EXT.join(',.') + ',text/*', formats: 'TXT · MD · CSV · JSON · LOG dan teks lainnya', defName: 'teks-ke-pdf', ext: 'pdf' },
     pdf2txt: { name: 'PDF → Teks', kind: 'pdf', accept: '.pdf,application/pdf', formats: 'PDF yang berisi teks (bukan hasil scan)', defName: 'pdf-ke-teks', ext: 'txt' }
@@ -151,6 +159,9 @@
   const LIBS = {
     jspdf: { url: CDN + 'jspdf/2.5.1/jspdf.umd.min.js', ok: () => window.jspdf && window.jspdf.jsPDF },
     jszip: { url: CDN + 'jszip/3.10.1/jszip.min.js', ok: () => window.JSZip },
+    html2canvas: { url: CDN + 'html2canvas/1.4.1/html2canvas.min.js', ok: () => window.html2canvas },
+    xlsx: { url: CDN + 'xlsx/0.18.5/xlsx.full.min.js', ok: () => window.XLSX },
+    mammoth: { urls: [CDN + 'mammoth/1.6.0/mammoth.browser.min.js', 'https://cdn.jsdelivr.net/npm/mammoth@1.6.0/mammoth.browser.min.js'], ok: () => window.mammoth },
     pdflib: { url: CDN + 'pdf-lib/1.17.1/pdf-lib.min.js', ok: () => window.PDFLib },
     pdfjs: {
       url: CDN + 'pdf.js/3.11.174/pdf.min.js',
@@ -159,22 +170,31 @@
     }
   };
   const libPromise = {};
+  function loadScript(u) {
+    return new Promise((res, rej) => {
+      const sc = document.createElement('script');
+      sc.src = u; sc.async = true;
+      sc.onload = () => res();
+      sc.onerror = () => { sc.remove(); rej(new Error('gagal')); };
+      document.head.appendChild(sc);
+    });
+  }
   function need(name) {
     const lib = LIBS[name];
     if (lib.ok()) return Promise.resolve();
     if (!libPromise[name]) {
-      libPromise[name] = new Promise((res, rej) => {
-        const sc = document.createElement('script');
-        sc.src = lib.url; sc.async = true;
-        sc.onload = () => { if (lib.after) lib.after(); res(); };
-        sc.onerror = () => { sc.remove(); delete libPromise[name]; rej(new Error('Pustaka "' + name + '" belum termuat. Periksa koneksi internet lalu coba lagi.')); };
-        document.head.appendChild(sc);
-      });
+      libPromise[name] = (async () => {
+        for (const u of (lib.urls || [lib.url])) {
+          try { await loadScript(u); if (lib.ok()) { if (lib.after) lib.after(); return; } } catch (_) { /* coba alamat berikutnya */ }
+        }
+        delete libPromise[name];
+        throw new Error('Pustaka "' + name + '" belum termuat. Periksa koneksi internet lalu coba lagi.');
+      })();
     }
     return libPromise[name];
   }
   // unduh pustaka di latar belakang sesuai alat yang dipilih (setelah browser idle)
-  const WARM = { img2pdf: ['jspdf'], txt2pdf: ['jspdf'], mergepdf: ['pdflib', 'pdfjs'], pdf2img: ['pdfjs', 'jszip'], imgconv: ['jszip'], imghd: ['jszip'], removebg: ['jszip'], restore: ['jszip'], pdf2txt: ['pdfjs'] };
+  const WARM = { img2pdf: ['jspdf'], txt2pdf: ['jspdf'], mergepdf: ['pdflib', 'pdfjs'], pdf2img: ['pdfjs', 'jszip'], imgconv: ['jszip'], imghd: ['jszip'], removebg: ['jszip'], restore: ['jszip'], html2pdf: ['jspdf', 'html2canvas'], word2pdf: ['jspdf', 'html2canvas', 'mammoth'], excel2pdf: ['jspdf', 'html2canvas', 'xlsx'], ppt2pdf: ['jspdf', 'html2canvas', 'jszip'], pdf2txt: ['pdfjs'] };
   function warmLibs() {
     const run = () => (WARM[state.tool] || []).forEach(n => need(n).catch(() => {}));
     if (window.requestIdleCallback) requestIdleCallback(run, { timeout: 2500 }); else setTimeout(run, 400);
@@ -285,8 +305,9 @@
     // opsi fit-to-image tidak untuk teks
     const paper = $('#paper');
     const fitOpt = paper.querySelector('option[value="fit"]');
-    fitOpt.disabled = fitOpt.hidden = t === 'txt2pdf';
-    if (t === 'txt2pdf' && paper.value === 'fit') paper.value = 'a4';
+    const noFit = ['txt2pdf', 'html2pdf', 'word2pdf', 'excel2pdf'].includes(t);
+    fitOpt.disabled = fitOpt.hidden = noFit;
+    if (noFit && paper.value === 'fit') paper.value = 'a4';
 
     const isFit = t === 'img2pdf' && paper.value === 'fit';
     $('#modeSetting').hidden = t !== 'img2pdf' || isFit;
@@ -1293,6 +1314,314 @@
     return r;
   }
 
+  /* ---------------------------------------------------------
+     DOKUMEN → PDF (HTML, Word, Excel, PowerPoint)
+     Dokumen dirender sebagai HTML lalu dipotong per halaman (hasil berupa gambar di PDF).
+  --------------------------------------------------------- */
+  const PX_PER_MM = 96 / 25.4;
+  const sleep = ms => new Promise(r => setTimeout(r, ms));
+  const DOC_CSS = 'html,body{margin:0;padding:0;background:#fff;color:#111}body{font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.5;word-wrap:break-word}img{max-width:100%;height:auto}table{border-collapse:collapse}td,th{border:1px solid #9aa0aa;padding:4px 8px;vertical-align:top}p{margin:0 0 .7em}h1,h2,h3,h4{line-height:1.25}';
+  const wrapDoc = (body, css) => '<!doctype html><html><head><meta charset="utf-8"><style>' + (css || DOC_CSS) + '</style></head><body>' + body + '</body></html>';
+
+  function makeFrame(html, widthPx) {
+    return new Promise((res, rej) => {
+      const fr = document.createElement('iframe');
+      fr.setAttribute('sandbox', 'allow-same-origin');   // skrip di dalam dokumen TIDAK dijalankan
+      fr.setAttribute('aria-hidden', 'true');
+      fr.style.cssText = `position:fixed;left:-30000px;top:0;width:${widthPx}px;height:800px;border:0;opacity:0;pointer-events:none`;
+      fr.onload = async () => {
+        try {
+          const d = fr.contentDocument;
+          await Promise.all(Array.from(d.images).map(im => im.complete ? 0 : new Promise(r => { im.onload = im.onerror = r; setTimeout(r, 4000); })));
+          if (d.fonts && d.fonts.ready) await Promise.race([d.fonts.ready, sleep(1500)]);
+          res(fr);
+        } catch (e) { rej(e); }
+      };
+      fr.srcdoc = html;
+      document.body.appendChild(fr);
+    });
+  }
+  const frameSize = fr => {
+    const d = fr.contentDocument, de = d.documentElement, b = d.body;
+    return { w: Math.max(de.scrollWidth, b ? b.scrollWidth : 0), h: Math.max(de.scrollHeight, b ? b.scrollHeight : 0) };
+  };
+  async function shotFrame(fr, x, y, w, h, winW, winH, scale) {
+    return await html2canvas(fr.contentDocument.documentElement, {
+      scale, backgroundColor: '#ffffff', useCORS: true, logging: false,
+      x, y, width: w, height: h, windowWidth: winW, windowHeight: winH, scrollX: 0, scrollY: 0
+    });
+  }
+
+  function docLayout(o) {
+    let [pw, ph] = PAPERS[o.paper] || PAPERS.a4;
+    if (o.orient === 'l') [pw, ph] = [ph, pw];
+    const m = Math.max(o.margin, 8);
+    const bm = o.watermark ? Math.max(m, WM_EDGE + wmWidthMm(pw) / WM.ratio + 3) : m;
+    return { pw, ph, m, cw: pw - 2 * m, chMm: ph - m - bm };
+  }
+  function newPdf(pw, ph) {
+    const { jsPDF } = window.jspdf;
+    return new jsPDF({ orientation: pw > ph ? 'l' : 'p', unit: 'mm', format: [pw, ph], compress: true });
+  }
+  async function finishDocPdf(doc, o, pw, ph, extra) {
+    if (o.watermark) await drawLastPageWatermark(doc, pw, ph);
+    setProgress(0.97, 'Menyusun file PDF…');
+    await tick();
+    const blob = doc.output('blob');
+    return { kind: 'pdf', blob, ext: 'pdf', info: `${doc.getNumberOfPages()} halaman · ${fmtSize(blob.size)}${extra ? ' · ' + extra : ''}` };
+  }
+
+  // tambahkan satu dokumen HTML ke PDF (otomatis dipotong per halaman)
+  async function addHtmlPages(doc, html, L, st, prog) {
+    const cwPx = Math.round(L.cw * PX_PER_MM);
+    const fr = await makeFrame(html, cwPx);
+    try {
+      let { w, h } = frameSize(fr);
+      let LW = cwPx;
+      if (w > cwPx + 2) {                       // dokumen lebih lebar dari halaman (mis. tabel Excel): perkecil
+        LW = Math.min(w, 3200);
+        fr.style.width = LW + 'px';
+        await sleep(80);
+        ({ w, h } = frameSize(fr));
+      }
+      fr.style.height = h + 'px';
+      const perMm = LW / L.cw;
+      const chunk = Math.max(50, Math.floor(L.chMm * perMm));
+      const pages = Math.max(1, Math.ceil(h / chunk));
+      const scale = Math.min(3, Math.max(1, 1500 / LW));
+      for (let p = 0; p < pages; p++) {
+        checkCancel();
+        prog(p / pages);
+        const y = p * chunk, hh = Math.min(chunk, h - y);
+        if (hh < 1) break;
+        const cv = await shotFrame(fr, 0, y, LW, hh, LW, h, scale);
+        const img = cv.toDataURL('image/jpeg', 0.92);
+        cv.width = cv.height = 0;
+        if (!st.first) doc.addPage([L.pw, L.ph], L.pw > L.ph ? 'l' : 'p');
+        st.first = false;
+        doc.addImage(img, 'JPEG', L.m, L.m, L.cw, hh / perMm, undefined, 'FAST');
+        await tick();
+      }
+    } finally { fr.remove(); }
+  }
+
+  async function buildHtmlPdf(o) {
+    await need('jspdf'); await need('html2canvas');
+    const L = docLayout(o), doc = newPdf(L.pw, L.ph), st = { first: true }, files = state.files;
+    for (let i = 0; i < files.length; i++) {
+      checkCancel();
+      const html = await files[i].file.text();
+      await addHtmlPages(doc, html, L, st, f => setProgress((i + f) / files.length, `Merender ${files[i].name} (${i + 1}/${files.length})`));
+    }
+    return await finishDocPdf(doc, o, L.pw, L.ph, 'hasil berupa gambar, teks tidak bisa diseleksi');
+  }
+
+  async function buildWordPdf(o) {
+    await need('jspdf'); await need('html2canvas'); await need('mammoth');
+    const L = docLayout(o), doc = newPdf(L.pw, L.ph), st = { first: true }, files = state.files;
+    for (let i = 0; i < files.length; i++) {
+      checkCancel();
+      setProgress(i / files.length, `Membaca ${files[i].name}`);
+      let r;
+      try { r = await mammoth.convertToHtml({ arrayBuffer: await files[i].file.arrayBuffer() }); }
+      catch (e) { throw new Error(`"${files[i].name}" tidak dapat dibaca (pastikan formatnya .docx, bukan .doc lama).`); }
+      await addHtmlPages(doc, wrapDoc(r.value || '<p></p>'), L, st, f => setProgress((i + f) / files.length, `Merender ${files[i].name} (${i + 1}/${files.length})`));
+    }
+    return await finishDocPdf(doc, o, L.pw, L.ph, 'tata letak disederhanakan');
+  }
+
+  async function buildExcelPdf(o) {
+    await need('jspdf'); await need('html2canvas'); await need('xlsx');
+    const L = docLayout(o), doc = newPdf(L.pw, L.ph), st = { first: true }, files = state.files;
+    let cut = false, anySheet = false;
+    for (let i = 0; i < files.length; i++) {
+      checkCancel();
+      setProgress(i / files.length, `Membaca ${files[i].name}`);
+      let wb;
+      try { wb = XLSX.read(await files[i].file.arrayBuffer(), { type: 'array', cellDates: true }); }
+      catch (e) { throw new Error(`"${files[i].name}" tidak dapat dibaca sebagai file Excel.`); }
+      const names = wb.SheetNames;
+      for (let s = 0; s < names.length; s++) {
+        let ws = wb.Sheets[names[s]];
+        if (!ws || !ws['!ref']) continue;
+        const rng = XLSX.utils.decode_range(ws['!ref']);
+        if (rng.e.r > 3999) { rng.e.r = 3999; ws = Object.assign({}, ws, { '!ref': XLSX.utils.encode_range(rng) }); cut = true; }
+        const m = XLSX.utils.sheet_to_html(ws).match(/<table[\s\S]*<\/table>/i);
+        if (!m) continue;
+        anySheet = true;
+        const html = wrapDoc(`<h3 style="margin:0 0 8px">${esc(files[i].name)} · ${esc(names[s])}</h3>` + m[0], DOC_CSS + 'td,th{font-size:12px;white-space:pre-wrap}');
+        await addHtmlPages(doc, html, L, st, f => setProgress((i + (s + f) / names.length) / files.length, `Merender ${files[i].name} · ${names[s]}`));
+      }
+    }
+    if (!anySheet) throw new Error('Tidak ada data yang bisa dibaca di file Excel ini.');
+    return await finishDocPdf(doc, o, L.pw, L.ph, cut ? 'sheet dipotong sampai 4000 baris' : 'tiap sheet dimulai di halaman baru');
+  }
+
+  /* ---- PowerPoint (.pptx): baca XML slide, tampilkan teks, gambar, tabel & posisi dasar ---- */
+  async function pptxToSlides(file) {
+    await need('jszip');
+    const zip = await JSZip.loadAsync(await file.arrayBuffer());
+    const parse = s => new DOMParser().parseFromString(s, 'application/xml');
+    const getXml = async p => { const f = zip.file(p); return f ? parse(await f.async('string')) : null; };
+    const attr = (el, n) => el ? el.getAttribute(n) : null;
+    const tags = (el, t) => Array.from(el.getElementsByTagName(t));
+    const one = (el, t) => el ? (el.getElementsByTagName(t)[0] || null) : null;
+    const kids = (el, t) => el ? Array.from(el.children).filter(c => c.tagName === t) : [];
+    const resolve = (base, t) => {
+      if (t.startsWith('/')) return t.slice(1);
+      const parts = base.split('/'); parts.pop();
+      t.split('/').forEach(s => { if (s === '..') parts.pop(); else if (s !== '.') parts.push(s); });
+      return parts.join('/');
+    };
+    const relsPath = p => p.replace(/([^/]+)$/, '_rels/$1.rels');
+    const readRels = async p => {
+      const d = await getXml(relsPath(p)), out = {};
+      if (d) tags(d, 'Relationship').forEach(r => { out[attr(r, 'Id')] = { type: attr(r, 'Type') || '', path: resolve(p, attr(r, 'Target') || '') }; });
+      return out;
+    };
+    const pres = await getXml('ppt/presentation.xml');
+    if (!pres) throw new Error(`"${file.name}" bukan file PPTX yang valid.`);
+    const sz = one(pres, 'p:sldSz');
+    const cx = +attr(sz, 'cx') || 9144000, cy = +attr(sz, 'cy') || 5143500;
+    const prel = await readRels('ppt/presentation.xml');
+    let paths = tags(pres, 'p:sldId').map(s => prel[attr(s, 'r:id')]).filter(Boolean).map(r => r.path);
+    if (!paths.length) paths = Object.keys(zip.files).filter(n => /^ppt\/slides\/slide\d+\.xml$/.test(n)).sort((a, b) => parseInt(a.match(/\d+/)[0]) - parseInt(b.match(/\d+/)[0]));
+
+    const SW = 1280, SH = Math.round(SW * cy / cx);
+    const kx = SW / cx, ky = SH / cy, ptPx = SW / (cx / 12700);
+    const colorOf = el => { const sf = kids(el, 'a:solidFill')[0]; const c = sf && sf.firstElementChild; return c && c.tagName === 'a:srgbClr' ? '#' + attr(c, 'val') : null; };
+    const bgOf = d => { const bg = d && one(d, 'p:bg'); const sf = bg && one(bg, 'a:solidFill'); const c = sf && one(sf, 'a:srgbClr'); return c ? '#' + attr(c, 'val') : null; };
+    const dark = c => { if (!c || c.length !== 7) return false; const r = parseInt(c.substr(1, 2), 16), g = parseInt(c.substr(3, 2), 16), b = parseInt(c.substr(5, 2), 16); return (r * 0.299 + g * 0.587 + b * 0.114) < 110; };
+    const MIME = { png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', gif: 'image/gif', svg: 'image/svg+xml', webp: 'image/webp', bmp: 'image/bmp' };
+    const mediaCache = {};
+    const media = async p => {
+      if (p in mediaCache) return mediaCache[p];
+      const f = zip.file(p), ext = (p.split('.').pop() || '').toLowerCase();
+      mediaCache[p] = (f && MIME[ext]) ? `data:${MIME[ext]};base64,` + await f.async('base64') : null;
+      return mediaCache[p];
+    };
+
+    const slides = [];
+    for (const sp of paths) {
+      const sd = await getXml(sp);
+      if (!sd) continue;
+      const rels = await readRels(sp);
+      // latar: slide → layout → master
+      let bg = bgOf(sd);
+      if (!bg) {
+        const lay = Object.values(rels).find(r => /slideLayout$/.test(r.type));
+        if (lay) {
+          const ld = await getXml(lay.path); bg = bgOf(ld);
+          if (!bg) { const lr = await readRels(lay.path); const ms = Object.values(lr).find(r => /slideMaster$/.test(r.type)); if (ms) bg = bgOf(await getXml(ms.path)); }
+        }
+      }
+      bg = bg || '#ffffff';
+      const defColor = dark(bg) ? '#ffffff' : '#111111';
+      let body = '';
+      const tree = one(sd, 'p:spTree');
+      const items = tree ? tags(tree, 'p:sp').concat(tags(tree, 'p:pic'), tags(tree, 'p:graphicFrame')) : [];
+      // urutkan sesuai urutan di dokumen
+      items.sort((a, b) => (a.compareDocumentPosition(b) & 4) ? -1 : 1);
+      let bodyIdx = 0;
+      for (const it of items) {
+        const kind = it.tagName;
+        const ph = kind === 'p:sp' ? one(it, 'p:ph') : null;
+        const phType = ph ? attr(ph, 'type') : null;
+        if (['dt', 'ftr', 'sldNum'].includes(phType)) continue;
+        const xf = kind === 'p:graphicFrame' ? one(it, 'p:xfrm') : one(it, 'a:xfrm');
+        let x, y, w, h, rot = 0;
+        const off = one(xf, 'a:off'), ext = one(xf, 'a:ext');
+        if (off && ext) { x = +attr(off, 'x') * kx; y = +attr(off, 'y') * ky; w = +attr(ext, 'cx') * kx; h = +attr(ext, 'cy') * ky; rot = (+attr(xf, 'rot') || 0) / 60000; }
+        else if (phType === 'title' || phType === 'ctrTitle') { x = SW * 0.06; w = SW * 0.88; y = phType === 'ctrTitle' ? SH * 0.3 : SH * 0.05; h = SH * 0.2; }
+        else if (phType === 'subTitle') { x = SW * 0.06; w = SW * 0.88; y = SH * 0.52; h = SH * 0.2; }
+        else { x = SW * 0.06; w = SW * 0.88; y = SH * 0.28 + (bodyIdx++) * 0; h = SH * 0.62; }
+        const pos = `left:${x.toFixed(1)}px;top:${y.toFixed(1)}px;width:${w.toFixed(1)}px;height:${h.toFixed(1)}px;` + (rot ? `transform:rotate(${rot}deg);` : '');
+
+        if (kind === 'p:pic') {
+          const bl = one(it, 'a:blip'), rid = attr(bl, 'r:embed'), rel = rid && rels[rid];
+          const src = rel ? await media(rel.path) : null;
+          if (src) body += `<img src="${src}" style="position:absolute;${pos}">`;
+          continue;
+        }
+        if (kind === 'p:graphicFrame') {
+          const tbl = one(it, 'a:tbl');
+          if (tbl) {
+            const rows = tags(tbl, 'a:tr').map(tr => '<tr>' + kids(tr, 'a:tc').map(tc => '<td>' + esc(tags(tc, 'a:t').map(t => t.textContent).join(' ')) + '</td>').join('') + '</tr>').join('');
+            body += `<div style="position:absolute;${pos}overflow:hidden"><table style="width:100%;border-collapse:collapse;font-size:${(14 * ptPx).toFixed(1)}px;color:${defColor}">${rows}</table></div>`;
+          }
+          continue;
+        }
+        // bentuk / kotak teks
+        const spPr = one(it, 'p:spPr');
+        const fill = spPr ? colorOf(spPr) : null;
+        const geom = spPr ? one(spPr, 'a:prstGeom') : null;
+        const round = geom && attr(geom, 'prst') === 'ellipse' ? 'border-radius:50%;' : '';
+        const tx = one(it, 'p:txBody');
+        const bp = tx ? one(tx, 'a:bodyPr') : null;
+        const isTitle = phType === 'title' || phType === 'ctrTitle';
+        const anchor = { t: 'flex-start', ctr: 'center', b: 'flex-end' }[attr(bp, 'anchor')] || (isTitle ? 'center' : 'flex-start');
+        const defPt = isTitle ? 32 : 18;
+        let paras = '';
+        if (tx) {
+          for (const p of kids(tx, 'a:p')) {
+            const pPr = kids(p, 'a:pPr')[0];
+            const algn = { ctr: 'center', r: 'right', just: 'justify' }[attr(pPr, 'algn')] || ((phType === 'ctrTitle' || phType === 'subTitle') ? 'center' : 'left');
+            const bullet = pPr && kids(pPr, 'a:buChar').length ? '• ' : '';
+            let runs = '', maxPt = defPt;
+            for (const r of Array.from(p.children)) {
+              if (r.tagName === 'a:br') { runs += '<br>'; continue; }
+              if (r.tagName !== 'a:r' && r.tagName !== 'a:fld') continue;
+              const t = one(r, 'a:t'); if (!t) continue;
+              const rPr = kids(r, 'a:rPr')[0];
+              const pt = rPr && attr(rPr, 'sz') ? +attr(rPr, 'sz') / 100 : defPt;
+              maxPt = Math.max(maxPt === defPt ? 0 : maxPt, pt);
+              const col = (rPr && colorOf(rPr)) || defColor;
+              runs += `<span style="font-size:${(pt * ptPx).toFixed(1)}px;color:${col};${attr(rPr, 'b') === '1' ? 'font-weight:700;' : ''}${attr(rPr, 'i') === '1' ? 'font-style:italic;' : ''}${attr(rPr, 'u') && attr(rPr, 'u') !== 'none' ? 'text-decoration:underline;' : ''}">${esc(t.textContent)}</span>`;
+            }
+            if (!runs) runs = '<br>';
+            paras += `<div style="text-align:${algn};line-height:1.2;margin:0 0 ${(0.35 * defPt * ptPx).toFixed(1)}px;font-size:${(maxPt * ptPx).toFixed(1)}px">${bullet ? `<span style="color:${defColor};font-size:${(defPt * ptPx).toFixed(1)}px">${bullet}</span>` : ''}${runs}</div>`;
+          }
+        }
+        if (!fill && !paras.replace(/<br>|<div[^>]*>|<\/div>/g, '').trim()) continue;
+        body += `<div style="position:absolute;${pos}box-sizing:border-box;padding:${(0.1 * 96 * SW / (cx / 9525)).toFixed(1)}px;display:flex;flex-direction:column;justify-content:${anchor};overflow:hidden;${fill ? `background:${fill};` : ''}${round}">${paras}</div>`;
+      }
+      slides.push(`<div style="position:relative;width:${SW}px;height:${SH}px;overflow:hidden;background:${bg};font-family:Arial,Helvetica,sans-serif">${body}</div>`);
+    }
+    return { SW, SH, ratio: cy / cx, slides };
+  }
+
+  async function buildPptPdf(o) {
+    await need('jspdf'); await need('html2canvas'); await need('jszip');
+    const files = state.files;
+    let doc = null, first = true, lastW = 297, lastH = 167, total = 0;
+    for (let i = 0; i < files.length; i++) {
+      checkCancel();
+      setProgress(i / files.length, `Membaca ${files[i].name}`);
+      let deck;
+      try { deck = await pptxToSlides(files[i].file); }
+      catch (e) { if (e && e.cancelled) throw e; throw new Error(e && e.message && /PPTX/.test(e.message) ? e.message : `"${files[i].name}" tidak dapat dibaca (pastikan formatnya .pptx, bukan .ppt lama).`); }
+      if (!deck.slides.length) throw new Error(`Tidak ada slide yang terbaca di "${files[i].name}".`);
+      const pw = 297, ph = +(297 * deck.ratio).toFixed(2);
+      if (!doc) doc = newPdf(pw, ph);
+      for (let s = 0; s < deck.slides.length; s++) {
+        checkCancel();
+        setProgress((i + s / deck.slides.length) / files.length, `Merender slide ${s + 1}/${deck.slides.length} · ${files[i].name}`);
+        const fr = await makeFrame(wrapDoc(deck.slides[s], 'html,body{margin:0;padding:0;background:#fff}'), deck.SW);
+        try {
+          const cv = await shotFrame(fr, 0, 0, deck.SW, deck.SH, deck.SW, deck.SH, 1.5);
+          const img = cv.toDataURL('image/jpeg', 0.92);
+          cv.width = cv.height = 0;
+          if (!first) doc.addPage([pw, ph], pw > ph ? 'l' : 'p');
+          first = false;
+          doc.addImage(img, 'JPEG', 0, 0, pw, ph, undefined, 'FAST');
+        } finally { fr.remove(); }
+        lastW = pw; lastH = ph; total++;
+        await tick();
+      }
+    }
+    return await finishDocPdf(doc, o, lastW, lastH, 'tampilan disederhanakan (latar tema, bentuk & animasi mungkin berbeda)');
+  }
+
   async function packImages(images, ext, label) {
     const total = images.reduce((s, i) => s + i.blob.size, 0);
     if (images.length === 1) {
@@ -1373,6 +1702,10 @@
         case 'imghd': r = await buildHdImages(o); break;
         case 'removebg': r = await buildRemoveBg(o); break;
         case 'restore': r = await buildRestoreImages(o); break;
+        case 'html2pdf': r = await buildHtmlPdf(o); break;
+        case 'word2pdf': r = await buildWordPdf(o); break;
+        case 'excel2pdf': r = await buildExcelPdf(o); break;
+        case 'ppt2pdf': r = await buildPptPdf(o); break;
         case 'mergepdf': r = await buildMergePdf(o); break;
         case 'txt2pdf': r = await buildTextPdf(o); break;
         case 'pdf2txt': r = await buildPdfToText(); break;
