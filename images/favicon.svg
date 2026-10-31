@@ -1,17 +1,16 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
   <title>ACE Converter</title>
   <defs>
-    <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0" stop-color="#6d5efc"/>
-      <stop offset=".55" stop-color="#3b82f6"/>
-      <stop offset="1" stop-color="#22d3ee"/>
-    </linearGradient>
-    <radialGradient id="h" cx=".25" cy=".08" r=".75">
-      <stop offset="0" stop-color="#fff" stop-opacity=".32"/>
-      <stop offset="1" stop-color="#fff" stop-opacity="0"/>
-    </radialGradient>
+    <linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#6d5efc"/><stop offset=".55" stop-color="#3b82f6"/><stop offset="1" stop-color="#22d3ee"/></linearGradient>
+    <radialGradient id="h" cx=".25" cy=".08" r=".8"><stop offset="0" stop-color="#fff" stop-opacity=".30"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></radialGradient>
   </defs>
-  <rect width="64" height="64" rx="14" fill="url(#g)"/>
-  <rect width="64" height="64" rx="14" fill="url(#h)"/>
-  <path transform="translate(12.961 50.000) scale(0.02416 -0.02416)" d="M47 0H439L536 317H1032L1133 0H1529L1017 1490H544ZM619 587 639 651C688 820 732 1008 777 1209C825 1009 874 821 926 651L946 587Z" fill="#fff"/>
+  <rect width="512" height="512" rx="112" fill="url(#g)"/>
+  <rect width="512" height="512" rx="112" fill="url(#h)"/>
+  <path d="M150 96h138l82 82v214a28 28 0 0 1-28 28H150a28 28 0 0 1-28-28V124a28 28 0 0 1 28-28z" fill="#fff"/>
+  <path d="M288 96v62a20 20 0 0 0 20 20h62z" fill="#c7d2fe"/>
+  <rect x="160" y="226" width="150" height="16" rx="8" fill="#a5b4fc"/>
+  <rect x="160" y="262" width="110" height="16" rx="8" fill="#a5b4fc"/>
+  <circle cx="352" cy="352" r="98" fill="#0b1226"/>
+  <g fill="none" stroke="#22d3ee" stroke-width="22" stroke-linecap="round" stroke-linejoin="round"><path d="M310 336h84"/><path d="M370 312l24 24-24 24"/></g>
+  <g fill="none" stroke="#fff" stroke-width="22" stroke-linecap="round" stroke-linejoin="round"><path d="M394 376h-84"/><path d="M334 352l-24 24 24 24"/></g>
 </svg>

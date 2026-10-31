@@ -285,6 +285,8 @@
 
     // judul & dropzone
     $('#toolName').textContent = cfg.name;
+    $('#menuCurrent').textContent = cfg.name;
+    const _ai = $('.tool.is-active svg'); if (_ai) $('#menuIcon').innerHTML = _ai.outerHTML;
     $('#dzFormats').textContent = cfg.formats;
     fileInput.accept = cfg.accept;
     $('#fileName').placeholder = cfg.defName;
@@ -548,6 +550,28 @@
     invalidate();
     renderList();
     if (state.files.length) warmLibs();
+  });
+
+  /* ---------------------------------------------------------
+     Menu pilihan konversi & dialog Tentang
+  --------------------------------------------------------- */
+  const menuDlg = $('#menuDialog');
+  const aboutDlg = $('#aboutDialog');
+  const sheetClose = d => { if (d.open) closeDialog(d); };
+  $('#menuBtn').addEventListener('click', () => openDialog(menuDlg));
+  $('#menuClose').addEventListener('click', () => sheetClose(menuDlg));
+  $('#tools').addEventListener('click', e => {
+    if (e.target.closest('.tool')) {
+      $$('.tool').forEach(x => x.setAttribute('aria-pressed', x.classList.contains('is-active')));
+      sheetClose(menuDlg);
+    }
+  });
+  const openAbout = () => { sheetClose(menuDlg); openDialog(aboutDlg); };
+  $('#aboutBtn').addEventListener('click', openAbout);
+  $('#aboutClose').addEventListener('click', () => sheetClose(aboutDlg));
+  [menuDlg, aboutDlg].forEach(d => {
+    d.addEventListener('click', e => { if (e.target === d) sheetClose(d); });
+    d.addEventListener('cancel', () => document.body.classList.remove('no-scroll'));
   });
 
   // perubahan pengaturan membatalkan hasil sebelumnya
