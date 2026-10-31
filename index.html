@@ -356,6 +356,11 @@
 
         <!-- Restore foto -->
         <div class="setting" data-tools="restore">
+          <label class="setting-label" for="rsPower">Kekuatan perbaikan: <b id="rsPowerVal">70</b>%</label>
+          <input type="range" id="rsPower" min="0" max="100" value="70">
+          <p class="hint">Geser ke kanan kalau hasilnya masih kurang terasa, ke kiri kalau terlalu keras.</p>
+        </div>
+        <div class="setting" data-tools="restore">
           <label class="switch">
             <input type="checkbox" id="rsColor" checked>
             <span class="track" aria-hidden="true"><span class="thumb-dot"></span></span>
@@ -379,7 +384,7 @@
         <div class="setting" data-tools="restore">
           <label class="setting-label" for="rsSharp">Ketajaman: <b id="rsSharpVal">40</b>%</label>
           <input type="range" id="rsSharp" min="0" max="100" value="40">
-          <p class="hint">Perbaikan otomatis tanpa AI, diproses di perangkatmu dan tetap jalan offline. Cocok untuk foto lama yang pudar, gelap, atau berdebu. Goresan panjang dan wajah yang rusak parah belum bisa diperbaiki. Hasil dibatasi sekitar 16 megapiksel.</p>
+          <p class="hint">Perbaikan otomatis tanpa AI, diproses di perangkatmu dan tetap jalan offline. Cocok untuk foto lama yang pudar, gelap, atau berdebu. Goresan panjang dan wajah yang rusak parah belum bisa diperbaiki. Foto diproses per potongan sehingga resolusi aslinya tetap terjaga (sampai sekitar 60 megapiksel).</p>
         </div>
 
         <!-- Watermark -->

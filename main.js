@@ -247,7 +247,8 @@
       rsColor: $('#rsColor').checked,
       rsScratch: $('#rsScratch').checked,
       rsDenoise: $('#rsDenoise').checked,
-      rsSharp: +$('#rsSharp').value
+      rsSharp: +$('#rsSharp').value,
+      rsPower: +$('#rsPower').value
     };
   }
 
@@ -294,6 +295,7 @@
     $('#convQualitySetting').hidden = (t !== 'imgconv' && t !== 'imghd' && t !== 'restore') || o.convFormat === 'png';
     $('#hdSharpVal').textContent = o.hdSharp;
     $('#rsSharpVal').textContent = o.rsSharp;
+    $('#rsPowerVal').textContent = o.rsPower;
     $('#convQualityVal').textContent = Math.round(o.convQuality * 100);
     $('#marginHint').textContent = MARGIN_TEXT[o.margin][1];
 
@@ -940,10 +942,9 @@
   }
 
   // haluskan bintik hanya di area datar (tepi/detail tidak ikut diburamkan)
-  async function hdDenoise(ctx, w, h) {
+  async function hdDenoise(ctx, w, h, S = 0.75, T = 36) {
     const img = ctx.getImageData(0, 0, w, h), d = img.data;
     const bl = await hdBoxBlur(d, w, h, 1, 1);
-    const T = 36, S = 0.75;
     const L = i => d[i] * 0.299 + d[i + 1] * 0.587 + d[i + 2] * 0.114;
     for (let y = 1; y < h - 1; y++) {
       for (let x = 1; x < w - 1; x++) {
@@ -1117,10 +1118,10 @@
      Restore Foto: perbaikan otomatis (tanpa AI) — warna, bintik, noise, ketajaman
   --------------------------------------------------------- */
   // hapus bintik/debu kecil: piksel yang sangat berbeda dari rata-rata sekitarnya diganti median 3x3
-  async function rsScratch(ctx, w, h) {
+  async function rsScratch(ctx, w, h, T = 38) {
     const img = ctx.getImageData(0, 0, w, h), d = img.data;
     const mean = await hdBoxBlur(d, w, h, 1, 1);
-    const T = 38, buf = [new Array(9), new Array(9), new Array(9)];
+    const buf = [new Array(9), new Array(9), new Array(9)];
     const lum = (a, i) => a[i] * 0.299 + a[i + 1] * 0.587 + a[i + 2] * 0.114;
     const out = new Uint8ClampedArray(d);
     for (let y = 1; y < h - 1; y++) {
@@ -1140,41 +1141,74 @@
     ctx.putImageData(img, 0, 0);
   }
 
-  // warna & kontras otomatis: regangkan tiap kanal warna, atur kecerahan, naikkan saturasi bila pudar
-  async function rsColor(ctx, w, h) {
-    const img = ctx.getImageData(0, 0, w, h), d = img.data;
+  // ---- warna & kontras otomatis (statistik dihitung dari versi kecil foto, lalu diterapkan per potongan) ----
+  const RS_MAX_PIXELS = 60e6;
+
+  async function rsColorStats(sw, sh, d, p) {
+    const n = sw * sh;
     const hist = [new Uint32Array(256), new Uint32Array(256), new Uint32Array(256)];
-    const step = Math.max(1, Math.floor(w * h / 2e6)) * 4;
-    let cnt = 0;
-    for (let i = 0; i < d.length; i += step) { hist[0][d[i]]++; hist[1][d[i + 1]]++; hist[2][d[i + 2]]++; cnt++; }
-    const pct = (hs, p) => { let s = 0; const t = cnt * p; for (let v = 0; v < 256; v++) { s += hs[v]; if (s >= t) return v; } return 255; };
+    for (let i = 0; i < d.length; i += 4) { hist[0][d[i]]++; hist[1][d[i + 1]]++; hist[2][d[i + 2]]++; }
+    const clip = 0.003 + 0.012 * p, blend = 0.55 + 0.45 * p;
+    const pct = (hs, q) => { let s = 0; const t = n * q; for (let v = 0; v < 256; v++) { s += hs[v]; if (s >= t) return v; } return 255; };
     const lut = [];
     for (let c = 0; c < 3; c++) {
-      let lo = pct(hist[c], 0.005), hi = pct(hist[c], 0.995);
-      if (hi - lo < 40) { lo = Math.max(0, lo - 20); hi = Math.min(255, hi + 20); }   // jangan terlalu agresif
+      let lo = pct(hist[c], clip), hi = pct(hist[c], 1 - clip);
+      if (hi - lo < 40) { lo = Math.max(0, lo - 20); hi = Math.min(255, hi + 20); }
       const t = new Uint8ClampedArray(256);
-      for (let v = 0; v < 256; v++) { const s = Math.min(1, Math.max(0, (v - lo) / (hi - lo))) * 255; t[v] = v * 0.2 + s * 0.8; }
+      for (let v = 0; v < 256; v++) { const st = Math.min(1, Math.max(0, (v - lo) / (hi - lo))) * 255; t[v] = v * (1 - blend) + st * blend; }
       lut.push(t);
     }
-    // kecerahan rata-rata setelah regangan -> gamma lembut
-    let sumL = 0, sumS = 0, n2 = 0;
-    for (let i = 0; i < d.length; i += step) {
+    let sumL = 0, sumS = 0;
+    for (let i = 0; i < d.length; i += 4) {
       const r = lut[0][d[i]], g = lut[1][d[i + 1]], b = lut[2][d[i + 2]];
       sumL += (r * 0.299 + g * 0.587 + b * 0.114) / 255;
       const mx = Math.max(r, g, b), mn = Math.min(r, g, b);
-      sumS += mx ? (mx - mn) / mx : 0; n2++;
+      sumS += mx ? (mx - mn) / mx : 0;
     }
-    const meanL = Math.min(0.8, Math.max(0.15, sumL / n2)), meanS = sumS / n2;
-    const gamma = Math.min(1.35, Math.max(0.75, Math.log(0.46) / Math.log(meanL)));
-    const sat = meanS < 0.12 ? 1.3 : meanS < 0.25 ? 1.12 : 1.0;
+    const meanL = Math.min(0.8, Math.max(0.15, sumL / n)), meanS = sumS / n;
+    const gRaw = Math.log(0.46) / Math.log(meanL);
+    const gamma = Math.min(1.45, Math.max(0.7, 1 + (gRaw - 1) * (0.5 + 0.5 * p)));
+    const sat = meanS < 0.12 ? 1 + 0.5 * p : meanS < 0.25 ? 1 + 0.25 * p : 1;
     const gl = new Uint8ClampedArray(256);
     for (let v = 0; v < 256; v++) gl[v] = Math.pow(v / 255, gamma) * 255;
+    const P = { lut, gl, sat, k: 0.7 * p };
+    // peta kecerahan lokal (blur besar) untuk kontras lokal
+    const map = new Uint8ClampedArray(sw * sh * 4);
+    for (let i = 0; i < n; i++) {
+      const o = i * 4, m = rsMapPix(P, d[o], d[o + 1], d[o + 2]);
+      const L = m[0] * 0.299 + m[1] * 0.587 + m[2] * 0.114;
+      map[o] = map[o + 1] = map[o + 2] = L; map[o + 3] = 255;
+    }
+    const bl = await hdBoxBlur(map, sw, sh, Math.max(2, Math.round(Math.max(sw, sh) * 0.04)), 3);
+    P.map = bl; P.mw = sw; P.mh = sh;
+    return P;
+  }
+  function rsMapPix(P, r, g, b) {
+    r = P.gl[P.lut[0][r]]; g = P.gl[P.lut[1][g]]; b = P.gl[P.lut[2][b]];
+    if (P.sat !== 1) { const l = r * 0.299 + g * 0.587 + b * 0.114; r = l + (r - l) * P.sat; g = l + (g - l) * P.sat; b = l + (b - l) * P.sat; }
+    return [r, g, b];
+  }
+  // terapkan ke satu potongan: y0 = baris awal potongan di foto penuh, H = tinggi foto penuh
+  async function rsColorApply(ctx, w, h, P, y0, H) {
+    const img = ctx.getImageData(0, 0, w, h), d = img.data;
+    const { map, mw, mh, k } = P;
+    const fxi = new Int32Array(w), fxf = new Float32Array(w);
+    for (let x = 0; x < w; x++) {
+      const f = Math.min(mw - 1, Math.max(0, (x + 0.5) / w * mw - 0.5));
+      fxi[x] = Math.min(mw - 2 < 0 ? 0 : mw - 2, Math.floor(f)); fxf[x] = f - fxi[x];
+    }
     for (let y = 0; y < h; y++) {
+      const f = Math.min(mh - 1, Math.max(0, (y0 + y + 0.5) / H * mh - 0.5));
+      const yi = Math.min(mh - 2 < 0 ? 0 : mh - 2, Math.floor(f)), yf = f - yi, yj = Math.min(mh - 1, yi + 1);
       for (let x = 0; x < w; x++) {
         const i = (y * w + x) * 4;
-        let r = gl[lut[0][d[i]]], g = gl[lut[1][d[i + 1]]], b = gl[lut[2][d[i + 2]]];
-        if (sat !== 1) { const l = r * 0.299 + g * 0.587 + b * 0.114; r = l + (r - l) * sat; g = l + (g - l) * sat; b = l + (b - l) * sat; }
-        d[i] = r; d[i + 1] = g; d[i + 2] = b;
+        const m = rsMapPix(P, d[i], d[i + 1], d[i + 2]);
+        const L = m[0] * 0.299 + m[1] * 0.587 + m[2] * 0.114;
+        const xi = fxi[x], xj = Math.min(mw - 1, xi + 1), xf = fxf[x];
+        const a = map[(yi * mw + xi) * 4] * (1 - xf) + map[(yi * mw + xj) * 4] * xf;
+        const b = map[(yj * mw + xi) * 4] * (1 - xf) + map[(yj * mw + xj) * 4] * xf;
+        const delta = (L - (a * (1 - yf) + b * yf)) * k;
+        d[i] = m[0] + delta; d[i + 1] = m[1] + delta; d[i + 2] = m[2] + delta;
       }
       if (y % 64 === 0) { checkCancel(); await tick(); }
     }
@@ -1187,6 +1221,7 @@
     const ext = o.convFormat === 'jpeg' ? 'jpg' : o.convFormat;
     const files = state.files;
     const images = [];
+    const p = o.rsPower / 100;
     let limited = false;
     for (let i = 0; i < files.length; i++) {
       checkCancel();
@@ -1194,32 +1229,67 @@
       const prog = (f, t) => setProgress((i + f) / files.length, `${t} ${label}`);
       prog(0, 'Membaca');
       const bmp = await loadBitmap(files[i].file);
-      let { w, h } = bmpSize(bmp);
+      const bs = bmpSize(bmp);
       let sc = 1;
-      if (w * h > HD_MAX_PIXELS) { sc = Math.sqrt(HD_MAX_PIXELS / (w * h)); limited = true; }
-      w = Math.max(1, Math.round(w * sc)); h = Math.max(1, Math.round(h * sc));
-      const c = document.createElement('canvas');
-      c.width = w; c.height = h;
-      const ctx = c.getContext('2d', { willReadFrequently: true });
-      if (o.convFormat === 'jpeg') { ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, w, h); }
-      ctx.imageSmoothingQuality = 'high';
-      ctx.drawImage(bmp, 0, 0, w, h);
+      if (bs.w * bs.h > RS_MAX_PIXELS) { sc = Math.sqrt(RS_MAX_PIXELS / (bs.w * bs.h)); limited = true; }
+      const w = Math.max(1, Math.round(bs.w * sc)), h = Math.max(1, Math.round(bs.h * sc));
+      const ry = bs.h / h;
+
+      const dst = document.createElement('canvas');
+      dst.width = w; dst.height = h;
+      const dctx = dst.getContext('2d');
+      if (o.convFormat === 'jpeg') { dctx.fillStyle = '#fff'; dctx.fillRect(0, 0, w, h); }
+
+      // statistik warna dari versi kecil (maks. 1000 px)
+      let P = null;
+      if (o.rsColor) {
+        prog(0.02, 'Menganalisis warna');
+        const ss = Math.min(1, 1000 / Math.max(w, h));
+        const sw = Math.max(2, Math.round(w * ss)), sh = Math.max(2, Math.round(h * ss));
+        const sc2 = document.createElement('canvas'); sc2.width = sw; sc2.height = sh;
+        const sctx = sc2.getContext('2d', { willReadFrequently: true });
+        if (o.convFormat === 'jpeg') { sctx.fillStyle = '#fff'; sctx.fillRect(0, 0, sw, sh); }
+        sctx.imageSmoothingQuality = 'high';
+        sctx.drawImage(bmp, 0, 0, sw, sh);
+        P = await rsColorStats(sw, sh, sctx.getImageData(0, 0, sw, sh).data, p);
+        sc2.width = sc2.height = 0;
+      }
+
+      // proses per potongan (hemat memori, foto tetap utuh resolusinya)
+      const PAD = 8, bh = Math.max(64, Math.floor(2.5e6 / w));
+      const bc = document.createElement('canvas');
+      for (let y0 = 0; y0 < h; y0 += bh) {
+        checkCancel();
+        const rows = Math.min(bh, h - y0);
+        const top = y0 > 0 ? PAD : 0, bot = (y0 + rows < h) ? PAD : 0;
+        const bH = rows + top + bot;
+        prog(0.05 + 0.9 * (y0 / h), 'Memulihkan');
+        bc.width = w; bc.height = bH;
+        const bctx = bc.getContext('2d', { willReadFrequently: true });
+        if (o.convFormat === 'jpeg') { bctx.fillStyle = '#fff'; bctx.fillRect(0, 0, w, bH); }
+        bctx.imageSmoothingQuality = 'high';
+        bctx.drawImage(bmp, 0, (y0 - top) * ry, bs.w, bH * ry, 0, 0, w, bH);
+
+        if (o.rsScratch) await rsScratch(bctx, w, bH, 60 - 45 * p);
+        if (o.rsDenoise) await hdDenoise(bctx, w, bH, 0.35 + 0.55 * p, 36 + 20 * p);
+        if (P) await rsColorApply(bctx, w, bH, P, y0 - top, h);
+        if (o.rsSharp > 0) await hdSharpen(bctx, w, bH, o.rsSharp / 100 * 1.2, 1);
+
+        dctx.drawImage(bc, 0, top, w, rows, 0, y0, w, rows);
+        await tick();
+      }
+      bc.width = bc.height = 0;
       if (bmp.close) bmp.close();
 
-      if (o.rsScratch) { prog(0.1, 'Menghapus bintik'); await rsScratch(ctx, w, h); }
-      if (o.rsDenoise) { prog(0.35, 'Menghaluskan noise'); await hdDenoise(ctx, w, h); }
-      if (o.rsColor) { prog(0.55, 'Memperbaiki warna'); await rsColor(ctx, w, h); }
-      if (o.rsSharp > 0) { prog(0.75, 'Menajamkan'); await hdSharpen(ctx, w, h, o.rsSharp / 100 * 1.2, 1); }
-
-      prog(0.92, 'Menyimpan');
-      const blob = await canvasToBlob(c, mime, o.convQuality);
+      prog(0.97, 'Menyimpan');
+      const blob = await canvasToBlob(dst, mime, o.convQuality);
       if (blob.type && blob.type !== mime) throw new Error('Browser ini belum mendukung ekspor ke format ' + ext.toUpperCase() + '. Coba format lain.');
-      c.width = c.height = 0;
+      dst.width = dst.height = 0;
       images.push({ name: `${baseOf(files[i].name)}-restore.${ext}`, blob });
       await tick();
     }
     const r = await packImages(images, ext, 'restore');
-    if (limited) r.info += ' · foto besar dikecilkan ke maksimal 16 megapiksel';
+    if (limited) r.info += ' · foto sangat besar dikecilkan ke maksimal 60 megapiksel';
     return r;
   }
 
