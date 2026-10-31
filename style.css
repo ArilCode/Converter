@@ -325,7 +325,7 @@ input[type="range"] { width: 100%; accent-color: var(--primary); height: 28px; }
 }
 .sheet.is-text .sheet-inner span { display: none; }
 .sheet-wm { position: absolute; left: 4%; bottom: 2%; pointer-events: none; line-height: 0; }
-.sheet-wm img { display: block; width: 100%; height: auto; opacity: .9; }
+.sheet-wm img { display: block; width: 100%; height: auto; opacity: .3; }
 
 /* ---------- Result / actions ---------- */
 .result-bar {

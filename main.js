@@ -655,7 +655,7 @@
     const w = wmWidthMm(pw), h = w / wm.ratio;
     doc.setPage(doc.getNumberOfPages());
     doc.saveGraphicsState();
-    doc.setGState(new doc.GState({ opacity: 0.9 }));
+    doc.setGState(new doc.GState({ opacity: 0.3 }));
     doc.addImage(wm.dataUrl, 'PNG', WM_EDGE, ph - h - WM_EDGE, w, h, 'ace-wm', 'FAST');
     doc.restoreGraphicsState();
   }
@@ -813,7 +813,7 @@
       const w = clamp(box.width * 0.17, 48, 120);
       const h = w / wm.ratio;
       const edge = 11; // ≈ 4 mm
-      page.drawImage(img, { x: box.x + edge, y: box.y + edge, width: w, height: h, opacity: 0.9 });
+      page.drawImage(img, { x: box.x + edge, y: box.y + edge, width: w, height: h, opacity: 0.3 });
     }
 
     setProgress(0.97, 'Menyimpan PDF…');
