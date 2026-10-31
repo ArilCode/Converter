@@ -101,6 +101,10 @@
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3l4 4-4 4"/><path d="M3 11V9a2 2 0 0 1 2-2h16"/><path d="M7 21l-4-4 4-4"/><path d="M21 13v2a2 2 0 0 1-2 2H3"/></svg>
         <span>Ubah Format Gambar</span>
       </button>
+      <button class="tool" aria-pressed="false" data-tool="imghd" type="button">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6"/><path d="M9 21H3v-6"/><path d="M21 3l-7 7"/><path d="M3 21l7-7"/></svg>
+        <span>HD Foto</span>
+      </button>
       <button class="tool" aria-pressed="false" data-tool="mergepdf" type="button">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m12 2 10 5-10 5L2 7z"/><path d="m2 17 10 5 10-5"/><path d="m2 12 10 5 10-5"/></svg>
         <span>Gabung PDF</span>
@@ -283,15 +287,15 @@
         </div>
 
         <!-- Ubah format gambar -->
-        <div class="setting" data-tools="imgconv">
-          <span class="setting-label">Ubah ke format</span>
+        <div class="setting" data-tools="imgconv imghd">
+          <span class="setting-label">Simpan sebagai format</span>
           <div class="segmented seg3" role="radiogroup" aria-label="Format tujuan">
             <label><input type="radio" name="convFormat" value="jpeg" checked><span>JPG</span></label>
             <label><input type="radio" name="convFormat" value="png"><span>PNG</span></label>
             <label><input type="radio" name="convFormat" value="webp"><span>WEBP</span></label>
           </div>
         </div>
-        <div class="setting" id="convQualitySetting" data-tools="imgconv">
+        <div class="setting" id="convQualitySetting" data-tools="imgconv imghd">
           <label class="setting-label" for="convQuality">Kualitas: <b id="convQualityVal">90</b>%</label>
           <input type="range" id="convQuality" min="30" max="100" value="90">
         </div>
@@ -307,6 +311,28 @@
               <option value="800">800 px</option>
             </select>
           </div>
+        </div>
+
+        <!-- HD Foto -->
+        <div class="setting" data-tools="imghd">
+          <span class="setting-label">Perbesar resolusi</span>
+          <div class="segmented seg3" role="radiogroup" aria-label="Skala perbesaran">
+            <label><input type="radio" name="hdScale" value="2" checked><span>2×</span></label>
+            <label><input type="radio" name="hdScale" value="3"><span>3×</span></label>
+            <label><input type="radio" name="hdScale" value="4"><span>4×</span></label>
+          </div>
+        </div>
+        <div class="setting" data-tools="imghd">
+          <label class="setting-label" for="hdSharp">Ketajaman: <b id="hdSharpVal">50</b>%</label>
+          <input type="range" id="hdSharp" min="0" max="100" value="50">
+        </div>
+        <div class="setting" data-tools="imghd">
+          <label class="switch">
+            <input type="checkbox" id="hdDenoise" checked>
+            <span class="track" aria-hidden="true"><span class="thumb-dot"></span></span>
+            <span class="switch-text"><b>Haluskan bintik (noise)</b><small>Merapikan foto yang kasar/pecah sebelum diperbesar</small></span>
+          </label>
+          <p class="hint" style="margin-top:10px">Peningkatan kualitas tanpa AI, diproses di perangkatmu. Hasil dibatasi sekitar 16 megapiksel supaya HP tidak hang, jadi foto yang sudah besar mungkin tidak bisa diperbesar penuh.</p>
         </div>
 
         <!-- Watermark -->

@@ -1,6 +1,6 @@
 /* ACE Converter — Service Worker (mode offline)
    Naikkan angka VERSION setiap kali kamu mengubah file web supaya HP memperbarui cache. */
-const VERSION = 'v1';
+const VERSION = 'v2';
 const APP_CACHE = 'ace-app-' + VERSION;
 const LIB_CACHE = 'ace-lib-v1';      // pustaka CDN (versinya sudah dikunci di URL)
 const FONT_CACHE = 'ace-font-v1';

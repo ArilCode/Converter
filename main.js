@@ -48,6 +48,7 @@
     img2pdf: { name: 'Gambar → PDF', kind: 'img', accept: '.jpg,.jpeg,.jfif,.png,.webp,.gif,.bmp,.avif,image/*', formats: 'JPG · JPEG · PNG · WEBP · GIF · BMP · AVIF', defName: 'gambar-ke-pdf', ext: 'pdf' },
     pdf2img: { name: 'PDF → Gambar', kind: 'pdf', accept: '.pdf,application/pdf', formats: 'PDF — semua halaman atau rentang tertentu', defName: 'pdf-ke-gambar', ext: 'zip' },
     imgconv: { name: 'Ubah Format Gambar', kind: 'img', accept: '.jpg,.jpeg,.jfif,.png,.webp,.gif,.bmp,.avif,image/*', formats: 'JPG · PNG · WEBP · GIF · BMP · AVIF', defName: 'gambar-konversi', ext: 'zip' },
+    imghd: { name: 'HD Foto', kind: 'img', accept: '.jpg,.jpeg,.jfif,.png,.webp,.gif,.bmp,.avif,image/*', formats: 'JPG · PNG · WEBP · GIF · BMP · AVIF', defName: 'foto-hd', ext: 'zip' },
     mergepdf: { name: 'Gabung PDF', kind: 'pdf', accept: '.pdf,application/pdf', formats: 'PDF — urutan sesuai nomor', defName: 'gabungan', ext: 'pdf' },
     txt2pdf: { name: 'Teks → PDF', kind: 'txt', accept: '.' + TXT_EXT.join(',.') + ',text/*', formats: 'TXT · MD · CSV · JSON · LOG dan teks lainnya', defName: 'teks-ke-pdf', ext: 'pdf' },
     pdf2txt: { name: 'PDF → Teks', kind: 'pdf', accept: '.pdf,application/pdf', formats: 'PDF yang berisi teks (bukan hasil scan)', defName: 'pdf-ke-teks', ext: 'txt' }
@@ -171,7 +172,7 @@
     return libPromise[name];
   }
   // unduh pustaka di latar belakang sesuai alat yang dipilih (setelah browser idle)
-  const WARM = { img2pdf: ['jspdf'], txt2pdf: ['jspdf'], mergepdf: ['pdflib', 'pdfjs'], pdf2img: ['pdfjs', 'jszip'], imgconv: ['jszip'], pdf2txt: ['pdfjs'] };
+  const WARM = { img2pdf: ['jspdf'], txt2pdf: ['jspdf'], mergepdf: ['pdflib', 'pdfjs'], pdf2img: ['pdfjs', 'jszip'], imgconv: ['jszip'], imghd: ['jszip'], pdf2txt: ['pdfjs'] };
   function warmLibs() {
     const run = () => (WARM[state.tool] || []).forEach(n => need(n).catch(() => {}));
     if (window.requestIdleCallback) requestIdleCallback(run, { timeout: 2500 }); else setTimeout(run, 400);
@@ -236,7 +237,10 @@
       range: $('#range').value.trim(),
       convFormat: val('convFormat') || 'jpeg',
       convQuality: (+$('#convQuality').value || 90) / 100,
-      maxSide: +$('#maxSide').value
+      maxSide: +$('#maxSide').value,
+      hdScale: +(val('hdScale') || 2),
+      hdSharp: +$('#hdSharp').value,
+      hdDenoise: $('#hdDenoise').checked
     };
   }
 
@@ -251,7 +255,7 @@
   function expectedExt() {
     if (state.result) return state.result.ext;
     const o = getOpts();
-    if (state.tool === 'imgconv' && state.files.length === 1) return o.convFormat === 'jpeg' ? 'jpg' : o.convFormat;
+    if ((state.tool === 'imgconv' || state.tool === 'imghd') && state.files.length === 1) return o.convFormat === 'jpeg' ? 'jpg' : o.convFormat;
     return TOOLS[state.tool].ext;
   }
 
@@ -279,7 +283,8 @@
     $('#modeSetting').hidden = t !== 'img2pdf' || isFit;
     $('#orientSetting').classList.toggle('is-disabled', isFit);
     $('#orientHint').textContent = isFit ? 'Fit to image: orientasi mengikuti tiap gambar secara otomatis.' : (t === 'img2pdf' && o.orient === 'auto' ? 'Otomatis: foto lebar jadi lanskap, foto tinggi jadi potret.' : '');
-    $('#convQualitySetting').hidden = t !== 'imgconv' || o.convFormat === 'png';
+    $('#convQualitySetting').hidden = (t !== 'imgconv' && t !== 'imghd') || o.convFormat === 'png';
+    $('#hdSharpVal').textContent = o.hdSharp;
     $('#convQualityVal').textContent = Math.round(o.convQuality * 100);
     $('#marginHint').textContent = MARGIN_TEXT[o.margin][1];
 
@@ -882,6 +887,146 @@
     return await packImages(images, ext, 'konversi');
   }
 
+  /* ---------------------------------------------------------
+     HD Foto: perbesar bertahap + haluskan noise + penajaman (unsharp mask)
+     Semua di canvas, tanpa pustaka luar, jadi tetap jalan offline.
+  --------------------------------------------------------- */
+  const HD_MAX_PIXELS = 16e6;
+
+  // blur kotak (box blur) terpisah; RGB saja. Mengembalikan salinan yang sudah di-blur.
+  async function hdBoxBlur(src, w, h, r, passes) {
+    const win = 2 * r + 1;
+    let a = new Uint8ClampedArray(src), b = new Uint8ClampedArray(src.length);
+    const cs = new Float32Array(w * 3);
+    const cl = (v, m) => v < 0 ? 0 : v > m ? m : v;
+    for (let p = 0; p < passes; p++) {
+      for (let y = 0; y < h; y++) {                       // horizontal a -> b
+        const row = y * w * 4;
+        for (let c = 0; c < 3; c++) {
+          let sum = 0;
+          for (let k = -r; k <= r; k++) sum += a[row + cl(k, w - 1) * 4 + c];
+          for (let x = 0; x < w; x++) {
+            b[row + x * 4 + c] = sum / win;
+            sum += a[row + cl(x + r + 1, w - 1) * 4 + c] - a[row + cl(x - r, w - 1) * 4 + c];
+          }
+        }
+        if (y % 64 === 0) { checkCancel(); await tick(); }
+      }
+      cs.fill(0);                                         // vertikal b -> a
+      for (let k = -r; k <= r; k++) {
+        const row = cl(k, h - 1) * w * 4;
+        for (let x = 0; x < w; x++) for (let c = 0; c < 3; c++) cs[x * 3 + c] += b[row + x * 4 + c];
+      }
+      for (let y = 0; y < h; y++) {
+        const o = y * w * 4, ad = cl(y + r + 1, h - 1) * w * 4, sb = cl(y - r, h - 1) * w * 4;
+        for (let x = 0; x < w; x++) for (let c = 0; c < 3; c++) {
+          const i = x * 3 + c;
+          a[o + x * 4 + c] = cs[i] / win;
+          cs[i] += b[ad + x * 4 + c] - b[sb + x * 4 + c];
+        }
+        if (y % 64 === 0) { checkCancel(); await tick(); }
+      }
+    }
+    return a;
+  }
+
+  // haluskan bintik hanya di area datar (tepi/detail tidak ikut diburamkan)
+  async function hdDenoise(ctx, w, h) {
+    const img = ctx.getImageData(0, 0, w, h), d = img.data;
+    const bl = await hdBoxBlur(d, w, h, 1, 1);
+    const T = 36, S = 0.75;
+    const L = i => d[i] * 0.299 + d[i + 1] * 0.587 + d[i + 2] * 0.114;
+    for (let y = 1; y < h - 1; y++) {
+      for (let x = 1; x < w - 1; x++) {
+        const i = (y * w + x) * 4;
+        const g = Math.abs(L(i + 4) - L(i - 4)) + Math.abs(L(i + w * 4) - L(i - w * 4));
+        const t = Math.max(0, 1 - g / T) * S;
+        if (t > 0) for (let c = 0; c < 3; c++) d[i + c] += (bl[i + c] - d[i + c]) * t;
+      }
+      if (y % 64 === 0) { checkCancel(); await tick(); }
+    }
+    ctx.putImageData(img, 0, 0);
+  }
+
+  async function hdSharpen(ctx, w, h, amount, radius) {
+    const img = ctx.getImageData(0, 0, w, h), d = img.data;
+    const bl = await hdBoxBlur(d, w, h, radius, 2);
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        const i = (y * w + x) * 4;
+        for (let c = 0; c < 3; c++) {
+          const diff = d[i + c] - bl[i + c];
+          if (diff > 2 || diff < -2) d[i + c] += diff * amount;
+        }
+      }
+      if (y % 64 === 0) { checkCancel(); await tick(); }
+    }
+    ctx.putImageData(img, 0, 0);
+  }
+
+  async function buildHdImages(o) {
+    await need('jszip');
+    const mime = 'image/' + o.convFormat;
+    const ext = o.convFormat === 'jpeg' ? 'jpg' : o.convFormat;
+    const files = state.files;
+    const images = [];
+    let limited = false;
+
+    for (let i = 0; i < files.length; i++) {
+      checkCancel();
+      const label = `${files[i].name} (${i + 1}/${files.length})`;
+      const prog = (f, t) => setProgress((i + f) / files.length, `${t} ${label}`);
+      prog(0, 'Membaca');
+      const bmp = await loadBitmap(files[i].file);
+      const { w, h } = bmpSize(bmp);
+      let scale = o.hdScale;
+      const cap = Math.sqrt(HD_MAX_PIXELS / (w * h));
+      if (scale > cap) { scale = Math.max(1, cap); limited = true; }
+      const tw = Math.max(1, Math.round(w * scale)), th = Math.max(1, Math.round(h * scale));
+
+      let cur = document.createElement('canvas');
+      cur.width = w; cur.height = h;
+      let ctx = cur.getContext('2d', { willReadFrequently: true });
+      if (o.convFormat === 'jpeg') { ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, w, h); }
+      ctx.drawImage(bmp, 0, 0);
+      if (bmp.close) bmp.close();
+
+      if (o.hdDenoise) { prog(0.15, 'Menghaluskan noise'); await hdDenoise(ctx, w, h); }
+
+      // perbesar bertahap (maks 2× per langkah) supaya lebih halus
+      let cw = w, ch = h, step = 0;
+      while (cw < tw || ch < th) {
+        checkCancel();
+        const nw = Math.min(tw, Math.round(cw * 2)), nh = Math.min(th, Math.round(ch * 2));
+        const nx = document.createElement('canvas');
+        nx.width = nw; nx.height = nh;
+        const nctx = nx.getContext('2d', { willReadFrequently: true });
+        nctx.imageSmoothingEnabled = true; nctx.imageSmoothingQuality = 'high';
+        nctx.drawImage(cur, 0, 0, cw, ch, 0, 0, nw, nh);
+        cur.width = cur.height = 0;
+        cur = nx; ctx = nctx; cw = nw; ch = nh;
+        prog(0.3 + 0.2 * (++step / 2), 'Memperbesar');
+        await tick();
+      }
+
+      if (o.hdSharp > 0) {
+        prog(0.55, 'Menajamkan');
+        const radius = Math.max(1, Math.min(3, Math.round(cw / w * 0.7)));
+        await hdSharpen(ctx, cw, ch, o.hdSharp / 100 * 1.6, radius);
+      }
+
+      prog(0.9, 'Menyimpan');
+      const blob = await canvasToBlob(cur, mime, o.convQuality);
+      if (blob.type && blob.type !== mime) throw new Error('Browser ini belum mendukung ekspor ke format ' + ext.toUpperCase() + '. Coba format lain.');
+      cur.width = cur.height = 0;
+      images.push({ name: `${baseOf(files[i].name)}-hd.${ext}`, blob });
+      await tick();
+    }
+    const r = await packImages(images, ext, 'hd');
+    if (limited) r.info += ' · diperbesar semaksimal 16 megapiksel';
+    return r;
+  }
+
   async function packImages(images, ext, label) {
     const total = images.reduce((s, i) => s + i.blob.size, 0);
     if (images.length === 1) {
@@ -959,6 +1104,7 @@
         case 'img2pdf': r = await buildImagesPdf(o); break;
         case 'pdf2img': r = await buildPdfToImages(o); break;
         case 'imgconv': r = await buildConvertImages(o); break;
+        case 'imghd': r = await buildHdImages(o); break;
         case 'mergepdf': r = await buildMergePdf(o); break;
         case 'txt2pdf': r = await buildTextPdf(o); break;
         case 'pdf2txt': r = await buildPdfToText(); break;
