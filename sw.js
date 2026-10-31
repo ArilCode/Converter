@@ -1,6 +1,6 @@
 /* ACE Converter — Service Worker (mode offline)
    Naikkan angka VERSION setiap kali kamu mengubah file web supaya HP memperbarui cache. */
-const VERSION = 'v2';
+const VERSION = 'v3';
 const APP_CACHE = 'ace-app-' + VERSION;
 const LIB_CACHE = 'ace-lib-v1';      // pustaka CDN (versinya sudah dikunci di URL)
 const FONT_CACHE = 'ace-font-v1';
@@ -79,6 +79,7 @@ self.addEventListener('fetch', e => {
     e.respondWith(staleWhileRevalidate(req, APP_CACHE, true));
     return;
   }
+  if (url.hostname === 'cdn.jsdelivr.net' || url.hostname === 'staticimgly.com') { e.respondWith(cacheFirst(req, LIB_CACHE)); return; }
   if (url.hostname === 'cdnjs.cloudflare.com') { e.respondWith(cacheFirst(req, LIB_CACHE)); return; }
   if (url.hostname === 'fonts.googleapis.com') { e.respondWith(staleWhileRevalidate(req, FONT_CACHE, false)); return; }
   if (url.hostname === 'fonts.gstatic.com') { e.respondWith(cacheFirst(req, FONT_CACHE)); return; }

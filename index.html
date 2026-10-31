@@ -105,6 +105,10 @@
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6"/><path d="M9 21H3v-6"/><path d="M21 3l-7 7"/><path d="M3 21l7-7"/></svg>
         <span>HD Foto</span>
       </button>
+      <button class="tool" aria-pressed="false" data-tool="removebg" type="button">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M20 4 8.12 15.88"/><path d="M14.47 14.48 20 20"/><path d="M8.12 8.12 12 12"/></svg>
+        <span>Hapus Latar</span>
+      </button>
       <button class="tool" aria-pressed="false" data-tool="mergepdf" type="button">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m12 2 10 5-10 5L2 7z"/><path d="m2 17 10 5 10-5"/><path d="m2 12 10 5 10-5"/></svg>
         <span>Gabung PDF</span>
@@ -333,6 +337,17 @@
             <span class="switch-text"><b>Haluskan bintik (noise)</b><small>Merapikan foto yang kasar/pecah sebelum diperbesar</small></span>
           </label>
           <p class="hint" style="margin-top:10px">Peningkatan kualitas tanpa AI, diproses di perangkatmu. Hasil dibatasi sekitar 16 megapiksel supaya HP tidak hang, jadi foto yang sudah besar mungkin tidak bisa diperbesar penuh.</p>
+        </div>
+
+        <!-- Hapus latar -->
+        <div class="setting" data-tools="removebg">
+          <span class="setting-label">Latar belakang baru</span>
+          <div class="segmented seg3" role="radiogroup" aria-label="Latar belakang baru">
+            <label><input type="radio" name="rbBg" value="transparent" checked><span>Transparan</span></label>
+            <label><input type="radio" name="rbBg" value="white"><span>Putih</span></label>
+            <label><input type="radio" name="rbBg" value="black"><span>Hitam</span></label>
+          </div>
+          <p class="hint">Hasil selalu PNG. Pertama kali dipakai butuh internet untuk mengunduh model AI (puluhan MB), setelah itu biasanya tersimpan dan bisa dipakai lagi tanpa internet. Foto besar otomatis dikecilkan maksimal 2560 px agar HP tidak hang.</p>
         </div>
 
         <!-- Watermark -->

@@ -49,6 +49,7 @@
     pdf2img: { name: 'PDF → Gambar', kind: 'pdf', accept: '.pdf,application/pdf', formats: 'PDF — semua halaman atau rentang tertentu', defName: 'pdf-ke-gambar', ext: 'zip' },
     imgconv: { name: 'Ubah Format Gambar', kind: 'img', accept: '.jpg,.jpeg,.jfif,.png,.webp,.gif,.bmp,.avif,image/*', formats: 'JPG · PNG · WEBP · GIF · BMP · AVIF', defName: 'gambar-konversi', ext: 'zip' },
     imghd: { name: 'HD Foto', kind: 'img', accept: '.jpg,.jpeg,.jfif,.png,.webp,.gif,.bmp,.avif,image/*', formats: 'JPG · PNG · WEBP · GIF · BMP · AVIF', defName: 'foto-hd', ext: 'zip' },
+    removebg: { name: 'Hapus Latar', kind: 'img', accept: '.jpg,.jpeg,.jfif,.png,.webp,.gif,.bmp,.avif,image/*', formats: 'JPG · PNG · WEBP · GIF · BMP · AVIF', defName: 'tanpa-latar', ext: 'zip' },
     mergepdf: { name: 'Gabung PDF', kind: 'pdf', accept: '.pdf,application/pdf', formats: 'PDF — urutan sesuai nomor', defName: 'gabungan', ext: 'pdf' },
     txt2pdf: { name: 'Teks → PDF', kind: 'txt', accept: '.' + TXT_EXT.join(',.') + ',text/*', formats: 'TXT · MD · CSV · JSON · LOG dan teks lainnya', defName: 'teks-ke-pdf', ext: 'pdf' },
     pdf2txt: { name: 'PDF → Teks', kind: 'pdf', accept: '.pdf,application/pdf', formats: 'PDF yang berisi teks (bukan hasil scan)', defName: 'pdf-ke-teks', ext: 'txt' }
@@ -172,7 +173,7 @@
     return libPromise[name];
   }
   // unduh pustaka di latar belakang sesuai alat yang dipilih (setelah browser idle)
-  const WARM = { img2pdf: ['jspdf'], txt2pdf: ['jspdf'], mergepdf: ['pdflib', 'pdfjs'], pdf2img: ['pdfjs', 'jszip'], imgconv: ['jszip'], imghd: ['jszip'], pdf2txt: ['pdfjs'] };
+  const WARM = { img2pdf: ['jspdf'], txt2pdf: ['jspdf'], mergepdf: ['pdflib', 'pdfjs'], pdf2img: ['pdfjs', 'jszip'], imgconv: ['jszip'], imghd: ['jszip'], removebg: ['jszip'], pdf2txt: ['pdfjs'] };
   function warmLibs() {
     const run = () => (WARM[state.tool] || []).forEach(n => need(n).catch(() => {}));
     if (window.requestIdleCallback) requestIdleCallback(run, { timeout: 2500 }); else setTimeout(run, 400);
@@ -240,7 +241,8 @@
       maxSide: +$('#maxSide').value,
       hdScale: +(val('hdScale') || 2),
       hdSharp: +$('#hdSharp').value,
-      hdDenoise: $('#hdDenoise').checked
+      hdDenoise: $('#hdDenoise').checked,
+      rbBg: val('rbBg') || 'transparent'
     };
   }
 
@@ -256,6 +258,7 @@
     if (state.result) return state.result.ext;
     const o = getOpts();
     if ((state.tool === 'imgconv' || state.tool === 'imghd') && state.files.length === 1) return o.convFormat === 'jpeg' ? 'jpg' : o.convFormat;
+    if (state.tool === 'removebg' && state.files.length === 1) return 'png';
     return TOOLS[state.tool].ext;
   }
 
@@ -1027,6 +1030,83 @@
     return r;
   }
 
+  /* ---------------------------------------------------------
+     Hapus Latar: model AI (@imgly/background-removal) dimuat saat dibutuhkan.
+     Model diunduh sekali dari internet, lalu disimpan service worker.
+  --------------------------------------------------------- */
+  const BG_LIB_URLS = [
+    'https://cdn.jsdelivr.net/npm/@imgly/background-removal@1.5.5/+esm',
+    'https://cdn.jsdelivr.net/npm/@imgly/background-removal@1.4.5/+esm'
+  ];
+  let bgFn = null;
+  async function loadBgLib() {
+    if (bgFn) return bgFn;
+    for (const u of BG_LIB_URLS) {
+      try {
+        const m = await import(u);
+        const fn = m.removeBackground || m.default;
+        if (typeof fn === 'function') { bgFn = fn; return fn; }
+      } catch (_) { /* coba alamat berikutnya */ }
+    }
+    throw new Error('Pustaka hapus latar belum termuat. Fitur ini butuh internet saat pertama kali dipakai. Periksa koneksi lalu coba lagi.');
+  }
+
+  async function buildRemoveBg(o) {
+    await need('jszip');
+    setProgress(0.02, 'Memuat pustaka AI…');
+    const removeBackground = await loadBgLib();
+    const files = state.files;
+    const images = [];
+    const MAXS = 2560;
+
+    for (let i = 0; i < files.length; i++) {
+      checkCancel();
+      const base = i / files.length, span = 1 / files.length;
+      setProgress(base, `Menyiapkan ${files[i].name} (${i + 1}/${files.length})`);
+      const bmp = await loadBitmap(files[i].file);
+      const { w, h } = bmpSize(bmp);
+      const sc = Math.min(1, MAXS / Math.max(w, h));
+      const c = document.createElement('canvas');
+      c.width = Math.max(1, Math.round(w * sc)); c.height = Math.max(1, Math.round(h * sc));
+      const ctx = c.getContext('2d');
+      ctx.imageSmoothingQuality = 'high';
+      ctx.drawImage(bmp, 0, 0, c.width, c.height);
+      if (bmp.close) bmp.close();
+      const srcBlob = await canvasToBlob(c, 'image/png');
+
+      let outBlob;
+      try {
+        outBlob = await removeBackground(srcBlob, {
+          progress: (key, cur, tot) => {
+            const f = tot ? Math.min(1, cur / tot) : 0;
+            const isFetch = String(key).startsWith('fetch');
+            setProgress(base + span * (isFetch ? 0.05 + 0.6 * f : 0.7 + 0.2 * f),
+              isFetch ? `Mengunduh model AI (hanya pertama kali) ${Math.round(f * 100)}%` : `Menghapus latar ${files[i].name}`);
+          }
+        });
+      } catch (err) {
+        if (err && err.cancelled) throw err;
+        throw new Error('Gagal menghapus latar. Pastikan internet aktif saat pertama kali memakai fitur ini. (' + (err && err.message ? err.message : 'kesalahan tidak diketahui') + ')');
+      }
+      checkCancel();
+
+      if (o.rbBg !== 'transparent') {
+        const fg = await createImageBitmap(outBlob);
+        ctx.clearRect(0, 0, c.width, c.height);
+        c.width = fg.width; c.height = fg.height;
+        ctx.fillStyle = o.rbBg === 'white' ? '#ffffff' : '#000000';
+        ctx.fillRect(0, 0, c.width, c.height);
+        ctx.drawImage(fg, 0, 0);
+        if (fg.close) fg.close();
+        outBlob = await canvasToBlob(c, 'image/png');
+      }
+      c.width = c.height = 0;
+      images.push({ name: `${baseOf(files[i].name)}-tanpa-latar.png`, blob: outBlob });
+      await tick();
+    }
+    return await packImages(images, 'png', 'tanpa-latar');
+  }
+
   async function packImages(images, ext, label) {
     const total = images.reduce((s, i) => s + i.blob.size, 0);
     if (images.length === 1) {
@@ -1105,6 +1185,7 @@
         case 'pdf2img': r = await buildPdfToImages(o); break;
         case 'imgconv': r = await buildConvertImages(o); break;
         case 'imghd': r = await buildHdImages(o); break;
+        case 'removebg': r = await buildRemoveBg(o); break;
         case 'mergepdf': r = await buildMergePdf(o); break;
         case 'txt2pdf': r = await buildTextPdf(o); break;
         case 'pdf2txt': r = await buildPdfToText(); break;
